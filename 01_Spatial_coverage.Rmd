@@ -1,0 +1,156 @@
+---
+title: "01_Spatial_coverage"
+output: html_document
+---
+
+## 1. Lib
+```{r setup, include=FALSE}
+library(tidyverse)
+```
+
+## 2. Read data
+```{r}
+dat_sed <- readxl::read_excel("Input_data/sediment_summary.xlsx", sheet = 2)
+dat_bio <- readxl::read_excel("Input_data/biota_summary_Rob_2018-11-10.xlsx", sheet = 2)
+
+# xtabs(~shape + colour, dat_sed)
+# xtabs(~region, dat_bio) %>% names() %>% dput()
+# xtabs(~detGroup, dat_bio) %>% names() %>% dput()
+# xtabs(~detGroup, dat_sed) %>% names() %>% dput()
+
+reg_ordered <- c("Barents Sea", "Greenland-Scotland ridge", "Norwegian Sea", 
+  "Northern North Sea", "Southern North Sea", "Norwegian Trench", "Skagerrak and Kattegat", "Channel", 
+  "Irish and Scottish West Coast", "Irish Sea", "Celtic Sea", 
+  "Gulf of Cadiz", "Iberian Sea", "Northern Bay of Biscay")
+
+
+detgroup_ordered <- c("Metals", "Chlorobiphenyls", "PAH (parent)", "Organo-bromines", 
+                      "Organo-metals", "Imposex", "PAH (alkylated)", "Biological effects", 
+                      "Dioxins", "Perfluoronated compounds", "Pesticides")
+
+dat_sed$region <- factor(dat_sed$region, levels = reg_ordered)
+dat_sed$detGroup <- factor(dat_sed$detGroup, levels = detgroup_ordered)
+
+dat_bio$region <- factor(dat_bio$region, levels = reg_ordered)
+dat_bio$detGroup <- factor(dat_bio$detGroup, levels = detgroup_ordered)
+
+
+```
+
+## 3. Sediment
+
+### a. Tabulate number of stations including informal assessment    
+```{r}
+df1 <- dat_sed %>%
+  filter(!detGroup %in% "PAH (alkylated)") %>%
+  count(OSPARregion, region, detGroup, determinand) 
+# df1 %>% filter(detGroup %in% "Organo-bromines" & region %in% "Skagerrak and Kattegat")
+
+df2 <- df1 %>%
+  group_by(OSPARregion, region, detGroup) %>%
+  summarize(N_stations_best = max(n))
+# df2 %>% filter(detGroup %in% "Organo-bromines" & region %in% "Skagerrak and Kattegat")
+
+df_sed_all <- df2 %>%
+  spread(detGroup, N_stations_best)
+
+df_sed_all
+```
+
+### b. Stations with status, spatially lumped   
+Stations < 0.1 lat and 0.2 long apart (order of <10 km apart) lumped      
+```{r}
+df_sed_status <- dat_sed %>%
+  filter(!detGroup %in% "PAH (alkylated)" & !shape %in% "small_open_circle") %>%
+  mutate(lat_r = round(latitude, 1), lon_r = 2*round(latitude/2, 1)) %>%
+  mutate(Location = paste(lat_r, lon_r, sep = "_")) %>%
+  count(OSPARregion, region, Location, detGroup, determinand) %>%
+  count(OSPARregion, region, detGroup, determinand) %>%
+  group_by(OSPARregion, region, detGroup) %>%
+  summarize(N_stations_best = max(nn)) %>%
+  spread(detGroup, N_stations_best)
+```
+
+### c. Stations with trend and status, spatially lumped   
+Stations < 0.1 lat and 0.2 long apart (order of <10 km apart) lumped      
+```{r}
+df_sed_trendstatus <- dat_sed %>%
+  filter(!detGroup %in% "PAH (alkylated)" & !shape %in% c("small_open_circle", "small_filled_circle")) %>%
+  mutate(lat_r = round(latitude, 1), lon_r = 2*round(latitude/2, 1)) %>%
+  mutate(Location = paste(lat_r, lon_r, sep = "_")) %>%
+  count(OSPARregion, region, Location, detGroup, determinand) %>%
+  count(OSPARregion, region, detGroup, determinand) %>%
+  group_by(OSPARregion, region, detGroup) %>%
+  summarize(N_stations_best = max(nn)) %>%
+  spread(detGroup, N_stations_best)
+```
+
+
+
+## 4. Biota  
+
+### a. Tabulate number of stations including informal assessment    
+```{r}
+df1 <- dat_bio %>%
+  filter(!detGroup %in% "PAH (alkylated)") %>%
+  count(OSPARregion, region, detGroup, determinand) 
+# df1 %>% filter(detGroup %in% "Organo-bromines" & region %in% "Skagerrak and Kattegat")
+
+df2 <- df1 %>%
+  group_by(OSPARregion, region, detGroup) %>%
+  summarize(N_stations_best = max(n))
+# df2 %>% filter(detGroup %in% "Organo-bromines" & region %in% "Skagerrak and Kattegat")
+
+df_bio_all <- df2 %>%
+  spread(detGroup, N_stations_best)
+
+df_bio_all
+```
+
+### b. Stations with status, spatially lumped   
+Stations < 0.1 lat and 0.2 long apart (order of <10 km apart) lumped      
+```{r}
+df_bio_status <- dat_bio %>%
+  filter(!detGroup %in% "PAH (alkylated)" & !shape %in% "small_open_circle") %>%
+  mutate(lat_r = round(latitude, 1), lon_r = 2*round(latitude/2, 1)) %>%
+  mutate(Location = paste(lat_r, lon_r, sep = "_")) %>%
+  count(OSPARregion, region, Location, detGroup, determinand) %>%
+  count(OSPARregion, region, detGroup, determinand) %>%
+  group_by(OSPARregion, region, detGroup) %>%
+  summarize(N_stations_best = max(nn)) %>%
+  spread(detGroup, N_stations_best)
+```
+
+### c. Stations with trend and status, spatially lumped   
+Stations < 0.1 lat and 0.2 long apart (order of <10 km apart) lumped      
+```{r}
+df_bio_trendstatus <- dat_bio %>%
+  filter(!detGroup %in% "PAH (alkylated)" & !shape %in% c("small_open_circle", "small_filled_circle")) %>%
+  mutate(lat_r = round(latitude, 1), lon_r = 2*round(latitude/2, 1)) %>%
+  mutate(Location = paste(lat_r, lon_r, sep = "_")) %>%
+  count(OSPARregion, region, Location, detGroup, determinand) %>%
+  count(OSPARregion, region, detGroup, determinand) %>%
+  group_by(OSPARregion, region, detGroup) %>%
+  summarize(N_stations_best = max(nn)) %>%
+  spread(detGroup, N_stations_best)
+```
+
+## 5. Save as excel
+
+```{r}
+df_list <- list(
+  df_sed_all, df_sed_status, df_sed_trendstatus,
+  df_bio_all, df_bio_status, df_bio_trendstatus
+)
+
+names(df_list) <- c(
+  "sed_all", "sed_status", "sed_trendstatus",
+  "bio_all", "bio_status", "bio_trendstatus"
+)
+
+openxlsx::write.xlsx(df_list, "Produced_data/01_Spatial_coverage.xlsx")
+
+?extract
+
+```
+
