@@ -1,0 +1,352 @@
+
+--
+title: "01_Spatial_coverage"
+output: html_document
+---
+
+## 1. Lib
+```{r setup, include=FALSE}
+library(tidyverse)
+library(sf)
+library(leaflet)
+```
+
+## Data
+
+### 2a. Read data
+```{r}
+dat_sed <- readxl::read_excel("Input_data/Summary_2019_11_19/sediment_summary.xlsx", sheet = 2, guess_max = 10000)
+dat_bio <- readxl::read_excel("Input_data/Summary_2019_11_19/biota_summary.xlsx", sheet = 2, guess_max = 10000)
+
+# xtabs(~shape + colour, dat_sed)
+# xtabs(~region, dat_bio) %>% names() %>% dput()
+# xtabs(~detGroup, dat_bio) %>% names() %>% dput()
+# xtabs(~detGroup, dat_sed) %>% names() %>% dput()
+
+reg_ordered <- c("Barents Sea", "Greenland-Scotland ridge", "Norwegian Sea", 
+  "Northern North Sea", "Southern North Sea", "Norwegian Trench", "Skagerrak and Kattegat", "Channel", 
+  "Irish and Scottish West Coast", "Irish Sea", "Celtic Sea", 
+  "Gulf of Cadiz", "Iberian Sea", "Northern Bay of Biscay")
+
+
+detgroup_ordered <- c("Metals", "Chlorobiphenyls", "PAH (parent)", "Organo-bromines", 
+                      "Organo-metals", "Imposex", "PAH (alkylated)", "Biological effects", 
+                      "Dioxins", "Perfluoronated compounds", "Pesticides")
+
+dat_sed$region <- factor(dat_sed$region, levels = reg_ordered)
+dat_sed$detGroup <- factor(dat_sed$detGroup, levels = detgroup_ordered)
+
+dat_bio$region <- factor(dat_bio$region, levels = reg_ordered)
+dat_bio$detGroup <- factor(dat_bio$detGroup, levels = detgroup_ordered)
+
+
+```
+
+### 2b. Check new Celtic Sea region
+```{r}
+
+# For first check (also in Cornwall)
+if (FALSE){
+  df <- dat_sed %>%
+    filter(determinand == "PB") %>%
+    filter(region == "Channel") %>%
+    mutate(Popup = paste(longitude, "<BR>", latitude, "<BR>", station, "<BR>", stationName))
+}
+
+
+df <- dat_sed %>%
+  filter(determinand == "PB") %>%
+  filter(region == "Channel" & latitude < 48.88 & longitude < -1.512) %>%
+  mutate(Popup = paste(longitude, "<BR>", latitude, "<BR>", station, "<BR>", stationName))
+
+df2 <- dat_sed %>%
+  filter(determinand == "PB") %>%
+  filter(region == "Northern Bay of Biscay") %>%
+  mutate(Popup = paste(longitude, "<BR>", latitude, "<BR>", station, "<BR>", stationName))
+
+df2a <- df2 %>%
+  filter(latitude > 48)
+df2b <- df2 %>%
+  filter(latitude <= 48)
+
+# Norway (coastline) in UTM coordinates
+nc_innerborders <- st_read("Input_data/ospar_inner_boundary_2016_01_002/ospar_inner_boundary_2016_01_002.shp")
+
+# Leaflet map
+leaflet(nc_innerborders) %>%
+  addTiles() %>%
+  addPolylines() %>%
+  addMarkers(lng = df$longitude, lat = df$latitude, popup = df$Popup) %>%
+  addCircleMarkers(lng = df2a$longitude, lat = df2a$latitude, popup = df2a$Popup) %>%
+  addCircleMarkers(lng = df2b$longitude, lat = df2b$latitude, popup = df2b$Popup, color = "red")
+
+
+```
+
+
+### 2c. Correct for new Celtic Sea region
+```{r}
+
+sel1 <- with(dat_sed, region == "Channel" & latitude < 48.88 & longitude < -1.512); sum(sel1)
+sel2 <- with(dat_sed, region == "Northern Bay of Biscay" & latitude > 48.0); sum(sel2)
+dat_sed$OSPARregion[sel1 | sel2] <- 3
+dat_sed$region[sel1 | sel2] <- "Celtic Sea"
+
+sel1 <- with(dat_bio, region == "Channel" & latitude < 48.88 & longitude < -1.512); sum(sel1)
+sel2 <- with(dat_bio, region == "Northern Bay of Biscay" & latitude > 48.0); sum(sel2)
+dat_bio$OSPARregion[sel1 | sel2] <- 3
+dat_bio$region[sel1 | sel2] <- "Celtic Sea"
+
+```
+
+### 2d. Final region check
+```{r}
+my_map <- map_data("world")
+
+gg <- dat_sed %>%
+  filter(determinand == "PB") %>%
+  ggplot(aes(longitude, latitude, color = region)) +
+  annotation_map(my_map, color = "lightblue", fill = NA) +
+  geom_point() +
+  coord_quickmap() +
+  theme_void() +
+  labs(title = "Region check (lead in sediment)")
+
+ggsave("Figures/Region check 1.png", gg)
+
+gg <- dat_bio %>%
+  filter(determinand == "PB") %>%
+  ggplot(aes(longitude, latitude, color = region)) +
+  annotation_map(my_map, color = "lightblue", fill = NA) +
+  geom_point() +
+  coord_quickmap() +
+  theme_void() +
+  labs(title = "Region check (lead in biota)")
+
+ggsave("Figures/Region check 2.png", gg)
+
+gg
+
+```
+
+
+## 3. Sediment
+
+### a. Tabulate number of stations including informal assessment    
+```{r}
+df1 <- dat_sed %>%
+  filter(!detGroup %in% "PAH (alkylated)") %>%
+  count(OSPARregion, region, detGroup, determinand) 
+# df1 %>% filter(detGroup %in% "Organo-bromines" & region %in% "Skagerrak and Kattegat")
+
+df2 <- df1 %>%
+  group_by(OSPARregion, region, detGroup) %>%
+  summarize(N_stations_best = max(n))
+# df2 %>% filter(detGroup %in% "Organo-bromines" & region %in% "Skagerrak and Kattegat")
+
+df_sed_all <- df2 %>%
+  spread(detGroup, N_stations_best)
+
+df_sed_all
+```
+
+### b. Stations spatially lumped   
+Stations < 0.1 lat and 0.2 long apart (order of <10 km apart) lumped      
+```{r}
+df_sed_10km <- dat_sed %>%
+  filter(!detGroup %in% "PAH (alkylated)") %>%
+  mutate(lat_r = 0.1*floor(latitude*10), 
+         lon_r = 0.2*floor(longitude*5),
+         Type = case_when(shape %in% "small_open_circle" ~ "Informal status",
+                          shape %in% "small_filled_circle" ~ "Status",
+                          TRUE ~ "Status and trend"),
+         Location = paste(lat_r, lon_r, sep = "_")) %>%
+  count(OSPARregion, region, lat_r, lon_r, detGroup, determinand, Type)
+
+```
+
+### c. Map 10 km squares 
+```{r}
+my_map <- map_data("world")
+
+gg <- df_sed_10km %>%
+  filter(determinand == "PB") %>%
+  ggplot(aes(lon_r, lat_r, color = Type)) +
+  annotation_map(my_map, color = "lightblue", fill = NA) +
+  geom_point() +
+  coord_quickmap() +
+  theme_void() +
+  labs(title = "Sediment (10 km squares)")
+
+ggsave("Figures/02_Sediment_map_squares.png", gg, width = 10, height = 7)
+
+gg
+
+```
+
+### d. Summarise and graph  
+```{r, fig.width=9, fig.height=7}
+df_sed_all <- df_sed_10km %>%
+  group_by(OSPARregion, region, Type, detGroup, determinand) %>%
+  summarise(n_per_det = n()) %>%
+  group_by(OSPARregion, region, Type, detGroup) %>%
+  summarise(n = n())
+
+gg <- ggplot(df_bio_all, aes(x = detGroup, y = n, fill = Type)) +
+  geom_col(color = "black", size = 0.2) +
+  scale_fill_manual(values = c("pink", "green", "blue3")) +
+  facet_wrap(vars(region)) +
+  theme(axis.text.x = element_text(hjust = 0, angle = -45)) + 
+  labs(title = "Sediment (number of 10 km squares)", y = "Number of 10 km squares")
+  
+ggsave("Figures/02_Sediment_no_squares.png", gg, width = 10, height = 7)
+
+gg
+
+```
+
+### e. Summary table
+```{r}
+df_sed_summary <- df_sed_all %>% 
+  spread(Type, n) %>%
+  mutate(Summary = paste(`Informal status`, "/", Status, "/", `Status and trend`)) %>%
+  select(OSPARregion, region, detGroup, Summary) %>%
+  spread(detGroup, Summary)
+
+```
+
+
+
+## 4. Biota
+
+### a. Tabulate number of stations including informal assessment    
+```{r}
+df1 <- dat_bio %>%
+  filter(!detGroup %in% "PAH (alkylated)") %>%
+  count(OSPARregion, region, detGroup, determinand) 
+# df1 %>% filter(detGroup %in% "Organo-bromines" & region %in% "Skagerrak and Kattegat")
+
+df2 <- df1 %>%
+  group_by(OSPARregion, region, detGroup) %>%
+  summarize(N_stations_best = max(n))
+# df2 %>% filter(detGroup %in% "Organo-bromines" & region %in% "Skagerrak and Kattegat")
+
+df_bio_all <- df2 %>%
+  spread(detGroup, N_stations_best)
+
+df_bio_all
+```
+
+### b. Stations spatially lumped   
+Stations < 0.1 lat and 0.2 long apart (order of <10 km apart) lumped      
+```{r}
+df_bio_10km <- dat_bio %>%
+  filter(!detGroup %in% "PAH (alkylated)") %>%
+  mutate(lat_r = 0.1*floor(latitude*10), 
+         lon_r = 0.2*floor(longitude*5),
+         Type = case_when(shape %in% "small_open_circle" ~ "Informal status",
+                          shape %in% "small_filled_circle" ~ "Status",
+                          TRUE ~ "Status and trend"),
+         Location = paste(lat_r, lon_r, sep = "_")) %>%
+  count(OSPARregion, region, lat_r, lon_r, detGroup, determinand, Type)
+
+```
+
+### c. Map 10 km squares 
+```{r}
+my_map <- map_data("world")
+
+gg <- df_bio_10km %>%
+  filter(determinand == "PB") %>%
+  ggplot(aes(lon_r, lat_r, color = Type)) +
+  annotation_map(my_map, color = "lightblue", fill = NA) +
+  geom_point() +
+  coord_quickmap() +
+  theme_void() +
+  labs(title = "Biota (10 km squares)")
+
+ggsave("Figures/02_Biota_map_squares.png", gg, width = 7, height = 7)
+
+gg
+
+```
+
+### d. Summarise and graph  
+```{r, fig.width=9, fig.height=7}
+df_bio_all <- df_bio_10km %>%
+  group_by(OSPARregion, region, Type, detGroup, determinand) %>%
+  summarise(n_per_det = n()) %>%
+  group_by(OSPARregion, region, Type, detGroup) %>%
+  summarise(n = n())
+
+gg <- ggplot(df_bio_all, aes(x = detGroup, y = n, fill = Type)) +
+  geom_col(color = "black", size = 0.2) +
+  scale_fill_manual(values = c("pink", "green", "blue3")) +
+  facet_wrap(vars(region)) +
+  theme(axis.text.x = element_text(hjust = 0, angle = -45)) + 
+  labs(title = "Biota (number of 10 km squares)", y = "Number of 10 km squares")
+  
+ggsave("Figures/02_Biota_no_squares.png", gg, width = 10, height = 7)
+
+gg
+
+```
+
+### e. Summary table
+```{r}
+df_bio_summary <- df_bio_all %>% 
+  spread(Type, n) %>%
+  mutate(Summary = paste(`Informal status`, "/", Status, "/", `Status and trend`)) %>%
+  select(OSPARregion, region, detGroup, Summary) %>%
+  spread(detGroup, Summary)
+
+```
+
+## 5. Saving  
+### a. Add missing regions in proper order
+```{r}
+df_regions <- dat_bio %>% count(OSPARregion, region) %>% select(-n)
+
+df_sed_all <- df_regions %>%
+  full_join(df_sed_all) 
+
+df_sed_summary <- df_regions %>%
+  full_join(df_sed_summary) 
+
+df_bio_all <- df_regions %>%
+  full_join(df_bio_all) 
+
+df_bio_summary <- df_regions %>%
+  full_join(df_bio_summary) 
+
+
+# ?full_join
+```
+
+### b. Save as excel
+
+```{r}
+info <- tibble(
+  `Numbers in summary tables: number of 10 km squares with` = 
+    "Informal status / Status / Status and trend"
+)
+
+df_list <- list(
+  df_sed_all, df_sed_summary,
+  df_bio_all, df_bio_summary, 
+  info
+)
+
+names(df_list) <- c(
+  "sed_all", "sed_summary", 
+  "bio_all", "bio_summary",
+  "Info"
+)
+
+openxlsx::write.xlsx(df_list, "Produced_data/02_Spatial_coverage_2019.xlsx")
+
+
+  # ?extract
+
+```
+
