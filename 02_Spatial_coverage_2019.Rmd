@@ -1,4 +1,3 @@
-
 --
 title: "01_Spatial_coverage"
 output: html_document
@@ -163,6 +162,16 @@ df_sed_10km <- dat_sed %>%
          Location = paste(lat_r, lon_r, sep = "_")) %>%
   count(OSPARregion, region, lat_r, lon_r, detGroup, determinand, Type)
 
+#
+# Statistics for number of stations per square (and determinand)
+#
+df <- df_sed_10km %>%
+  group_by(lat_r, lon_r, detGroup, determinand) %>%
+  summarise(n = sum(n)) 
+perc <- 100*table(df$n)/sum(table(df$n))
+perc
+cumsum(perc)
+
 ```
 
 ### c. Map 10 km squares 
@@ -176,9 +185,12 @@ gg <- df_sed_10km %>%
   geom_point() +
   coord_quickmap() +
   theme_void() +
-  labs(title = "Sediment (10 km squares)")
+  labs(title = "Sediment") +
+  theme(axis.title.x = element_blank(),
+        legend.text = element_text(size = rel(1.3)))
 
-ggsave("Figures/02_Sediment_map_squares.png", gg, width = 10, height = 7)
+
+ggsave("Figures/02_Sediment_map_squares.png", gg, width = 7, height = 7, dpi = 500)
 
 gg
 
@@ -190,16 +202,25 @@ df_sed_all <- df_sed_10km %>%
   group_by(OSPARregion, region, Type, detGroup, determinand) %>%
   summarise(n_per_det = n()) %>%
   group_by(OSPARregion, region, Type, detGroup) %>%
-  summarise(n = n())
+  summarise(n = n()) %>%
+  ungroup()
 
-gg <- ggplot(df_bio_all, aes(x = detGroup, y = n, fill = Type)) +
+# For plot 
+df <- df_sed_all
+sel <- levels(df$region) == "Irish and Scottish West Coast"
+levels(df$region)[sel] <- "Irish and Scottish\nWest Coast"
+levels(df$region)
+
+gg <- ggplot(df, aes(x = detGroup, y = n, fill = Type)) +
   geom_col(color = "black", size = 0.2) +
   scale_fill_manual(values = c("pink", "green", "blue3")) +
   facet_wrap(vars(region)) +
   theme(axis.text.x = element_text(hjust = 0, angle = -45)) + 
-  labs(title = "Sediment (number of 10 km squares)", y = "Number of 10 km squares")
-  
-ggsave("Figures/02_Sediment_no_squares.png", gg, width = 10, height = 7)
+  labs(title = "Sediment (number of grid squares)", y = "Number of 0.1 x 0.2 degree grid squares") +
+  theme(axis.title.x = element_blank(),
+        legend.text = element_text(size = rel(1.2)))
+
+ggsave("Figures/02_Sediment_no_squares.png", gg, width = 6.5, height = 5.5, dpi = 500)
 
 gg
 
@@ -250,6 +271,16 @@ df_bio_10km <- dat_bio %>%
          Location = paste(lat_r, lon_r, sep = "_")) %>%
   count(OSPARregion, region, lat_r, lon_r, detGroup, determinand, Type)
 
+#
+# Statistics for number of stations per square (and determinand)
+#
+df <- df_bio_10km %>%
+  group_by(lat_r, lon_r, detGroup, determinand) %>%
+  summarise(n = sum(n)) 
+perc <- 100*table(df$n)/sum(table(df$n))
+perc
+cumsum(perc)
+
 ```
 
 ### c. Map 10 km squares 
@@ -263,9 +294,11 @@ gg <- df_bio_10km %>%
   geom_point() +
   coord_quickmap() +
   theme_void() +
-  labs(title = "Biota (10 km squares)")
+  labs(title = "Biota") +
+  theme(axis.title.x = element_blank(),
+        legend.text = element_text(size = rel(1.3)))
 
-ggsave("Figures/02_Biota_map_squares.png", gg, width = 7, height = 7)
+ggsave("Figures/02_Biota_map_squares.png", gg, width = 7, height = 7, dpi = 500)
 
 gg
 
@@ -279,14 +312,22 @@ df_bio_all <- df_bio_10km %>%
   group_by(OSPARregion, region, Type, detGroup) %>%
   summarise(n = n())
 
-gg <- ggplot(df_bio_all, aes(x = detGroup, y = n, fill = Type)) +
+# For plot 
+df <- df_bio_all
+sel <- levels(df$region) == "Irish and Scottish West Coast"
+levels(df$region)[sel] <- "Irish and Scottish\nWest Coast"
+levels(df$region)
+
+gg <- ggplot(df, aes(x = detGroup, y = n, fill = Type)) +
   geom_col(color = "black", size = 0.2) +
   scale_fill_manual(values = c("pink", "green", "blue3")) +
   facet_wrap(vars(region)) +
   theme(axis.text.x = element_text(hjust = 0, angle = -45)) + 
-  labs(title = "Biota (number of 10 km squares)", y = "Number of 10 km squares")
-  
-ggsave("Figures/02_Biota_no_squares.png", gg, width = 10, height = 7)
+  labs(title = "Biota (number of grid squares)", y = "Number of 0.1 x 0.2 degree grid squares") +
+  theme(axis.title.x = element_blank(),
+        legend.text = element_text(size = rel(1.2)))
+
+ggsave("Figures/02_Biota_no_squares.png", gg, width = 8, height = 5.5, dpi = 500)
 
 gg
 
