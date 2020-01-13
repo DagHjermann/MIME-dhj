@@ -1,0 +1,755 @@
+---
+title: "04_Check_station_dict_merge"
+author: "DHJ"
+date: "23 12 2019"
+output: html_document
+---
+
+Check the file used by Hans/Rob for merging stations   
+- This is based on mail echange with Rob Oct 2019 - Jan 2021    
+- Also see '26_Fix_submitted_ICES_file' in the 'Milkys' project, which is quite relevant - for instance by checking on the missing years for stations 30B and 98B (which Rob answered is due to errors in the submitted uncertainties)  
+  
+Note: This script can also be used for checking which stations that have been not marked for "Contaminants" or "Time series", as it also reads the ICES station dictionary data.  
+
+
+## Packages
+```{r}
+library(readxl)
+library(dplyr)
+library(purrr)     # map_df()µ
+library(ggplot2)
+library(readr)
+library(tidyr)     # pivot_longer and pivot_shorter
+library(stringr)
+
+source("03_Check_Norwegian_data_spec.R", encoding = "UTF-8")  # contains 'spec_bigexcel'
+source("04_Check_station_dict_merg_functions.R")
+
+```
+
+## Data
+
+### dat_merge + own data sources
+```{r}
+#
+# Stations to merge
+#
+dat_merge <- read_excel("Data/Norway StationDictionary_20191010_for_Rob.xlsx") # %>% View()
+
+# Remove trailing fullstop
+dat_merge$Notes <- sub(".", "", dat_merge$Notes, fixed = "TRUE")
+
+# MILKYS data from script 10
+dat <- readRDS("../Milkys/Data/10_data_all.RData")
+
+# MILKYS data from script 01
+dat01 <- readRDS("../Milkys/Data/01_dat_all.rds")
+
+# MILKYS data from old Excel
+datxl <- readr::read_csv2(
+  "Input_data/Trendtabell_20160919_Komplett_v4_GSE med samletabell.csv",
+  col_types = spec_bigexcel
+  )
+
+
+# fn <-   "OSPAR_MIME_2019/OSPAR_MIME_AMAP_Biota_contaminants_effects_20191010/OSPAR_MIME_AMAP_Biota_contaminants_effects_20191010.txt"
+
+  
+```
+
+### ICES data
+```{r}
+spec_ices <- cols(
+  .default = col_character(),
+  OSPAR_region = col_double(),
+  SD_StationCode = col_double(),
+  SD_ASMT_StationCode = col_logical(),
+  MYEAR = col_double(),
+  Latitude = col_double(),
+  Longitude = col_double(),
+  NOINP = col_double(),
+  Value = col_double(),
+  DETLI = col_double(),
+  LMQNT = col_double(),
+  UNCRT = col_double(),
+  VFLAG = col_character(),
+  tblAnalysisID = col_double(),
+  tblParamID = col_double(),
+  tblBioID = col_double(),
+  tblSampleID = col_double(),
+  tblUploadID = col_double()
+)
+
+fn <-   "OSPAR_MIME_2019/OSPAR_MIME_AMAP_Biota_contaminants_effects_20191010/OSPAR_MIME_AMAP_Biota_contaminants_effects_20191010_utf8.txt"
+dat_ices_all <- readr::read_tsv(fn, guess_max = 10000, col_types = spec_ices)
+nrow(dat_ices_all) # 1517916
+head(dat_ices_all)
+
+table(dat_ices_all$Country)
+
+dat_ices <- subset(dat_ices_all, Country %in% "Norway")
+
+```
+
+### Read ICES station dictionary  
+Downloaded via the data tool on ocean.ices.dk  
+```{r}
+
+spec_stdict <- cols(
+  .default = col_character(),
+  Lat = col_double(),
+  LatRange = col_double(),
+  Lon = col_double(),
+  LonRange = col_double(),
+  StartYear = col_double(),
+  EndYear = col_double(),
+  MaxLat = col_double(),
+  MinLat = col_double(),
+  MaxLon = col_double(),
+  MinLon = col_double()
+)
+
+fn <-   "OSPAR_MIME_2019/StationDictionary_20191104/StationDictionary_20191104_utf8.txt"
+# readLines(fn, n = 1)
+dat_stdict <- readr::read_tsv(fn, col_types = spec_stdict)
+nrow(dat_stdict) # 12656
+head(dat_stdict)
+
+table(dat_stdict$Country)
+
+```
+
+
+### Check that all "Note" stations exist in Station_Name
+```{r}
+mergedstations <- dat_merge$Notes[!is.na(dat_merge$Notes)] %>% unique()
+sel <- mergedstations %in% dat_merge$Station_Name
+# mean(sel)  # 1 
+# sum(sel)   # 78
+
+if (mean(sel)<1){
+  cat("Some 'Note' stations are not found in Station_Name\n")
+} else {
+  cat("OK\n")
+}
+
+```
+
+### Check ContBio and PURPM_temporal  
+NOTE:  
+- This is not really part of the "merge stations" work flow, but needed anyway    
+  
+ContBio  
+- stations marked as used for contaminant data
+- "Data types monitored" includes "Contaminats/Hazardous substances"  
+- If _not_ ContBio = 1, these stations will be excluded in Rob's extraction    
+PURPM_temporal  
+- stations that will be used in time series       
+- Purpose includes "time trend monitoring"  
+  
+__If we want to change ContBio and/or PURPM_temporal__
+- Go here:    
+https://www.ices.dk/marine-data/tools/Pages/Station-dictionary.aspx   
+- Choose "Manage stations" (or go here: https://vocab.ices.dk/Request/Login.aspx?ReturnUrl=%2frequest)   
+- Log in (remember to set "Station" in the menu, not "Platform"!)   
+- Search up the station (or all Norwegian stations) in the left part of the window  
+- Click the station, which opens up the station on the right side  
+- Click "Submit attributes", which opens up a pop-up window  
+- Do the changes (e.g., in "Data types monitored", add "Contaminats/Hazardous substances")
+ which is the same as "ContBio = 1)
+- Click "Save changes"  
+- You will get a mail that the changes have been submitted for approval   
+   
+__Changes done (or not done)__:  
+- Add "Contaminats/Hazardous substances" is included in "Data types monitored" to the new stations     
+    - 19B Isfjorden   
+    - 19N Breøyane   
+    - 28A2 Ålesund harbour  
+- Also add "Contaminats/Hazardous substances" and purpose = "time trend monitoring" to old stations (which are part of longer time series, see "checking all stations" further down + "Figures_04" folder)    
+    - 43B1 Leisundet (part of 43B + 43B1)  
+    - 43F1 Leisundet (part of 43F + 43F1)  
+    - 45B1 Revsbotn (part of 45B + 45B1)
+    - 45F Hammerfest area   
+- All the snail stations (with "G" in code) are used only once, we leave them as they are  
+
+```{r}
+# if (TRUE){
+if (FALSE){
+
+  # Check "ContBio"
+  dat_stdict %>%
+    filter(Country %in% "Norway") %>%
+    count(ContBio)
+
+  # Stations with "ContBio" = 0 (sorted by number of years of data in "dat_ices")
+  stations_nocont <- dat_stdict %>%
+    filter(Country %in% "Norway" & ContBio %in% 0) %>%
+    pull(Station_Name)
+  dat_ices %>%
+    # filter(StationName %in% "30B Oslo City area") %>%
+    filter(StationName %in% stations_nocont) %>%
+    count(StationName, MYEAR) %>% 
+    count(StationName) %>%
+    arrange(desc(n))
+  
+  # Stations with "ContBio" = 0 (sorted by number of years of data in "dat_ices")
+  stations_nocont <- dat_stdict %>%
+    filter(Country %in% "Norway" & (ContBio %in% 0 | PURPM_temporal %in% 0)) %>%
+    pull(Station_Name)
+  dat_ices %>%
+    # filter(StationName %in% "30B Oslo City area") %>%
+    filter(StationName %in% stations_nocont) %>%
+    count(StationName, MYEAR) %>% 
+    count(StationName) %>%
+    left_join(subset(dat_stdict, select = c(Station_Name, ContBio, BioEffBio, PURPM_temporal)),
+              by = c("StationName" = "Station_Name")) %>%
+    arrange(desc(n))
+
+    # Check up specific stations  
+  # E.g. snail station 41G1:
+  #   One year of data, but seems to have individual data for sneil height (52 measurements of HTMEA) and 
+  #   imposex (28 IMPS values), length of female and male penis (LNFPE, LNMPE, 28 values)
+  if (FALSE){
+    tab <- dat %>%
+      filter(STATION_CODE == "41G1") %>% View()
+      count(MYEAR, PARAM)
+    tab
+    tab %>%
+      group_by(MYEAR) %>%
+      summarise(PARAM = paste(PARAM, collapse = ","))
+  }
+
+  
+  # View station dictionary  (checking "ContBio", in particular)
+  dat_stdict %>%
+    filter(Country %in% "Norway") %>%
+    arrange(ContBio, BioEffBio, PURPM_temporal) %>%
+    select(Station_Name, Organisation, MSTAT, ContBio, BioEffBio, PURPM_temporal) %>%
+    View("Station dict")
+
+  
+  
+}
+
+```
+
+
+## Pick stations
+```{r}
+
+# By number...
+i <- 1
+mergedstation <- mergedstations[i]
+
+# Or by name:
+# mergedstation <- grep("45B", mergedstations, value = TRUE)
+
+sel <- dat_merge$Notes %in% mergedstation
+# dat_merge[sel,]
+
+no_of_years(mergedstation)
+
+
+```
+
+## Check using plots  
+
+### Make df_mergedstations
+
+```{r}
+df_mergedstations <- map_df(mergedstations, no_of_years)
+
+# df_mergedstations
+
+# Exclude sediment stations:
+df_mergedstations %>%
+  filter(!substr(Station_name,3,3) %in% "S")
+
+```
+
+### Test function  
+Used below to make a bunch of these    
+```{r , fig.width = 7, fig.height = 8}
+
+check_data_shortcode("30B")
+
+```
+
+### Check getting short names  
+Only 'mergedstations_pick' ( = 'sts' without snails) is used later
+```{r}
+sts <- df_mergedstations %>%
+  filter(!substr(Station_name,3,3) %in% "S") %>%
+  pull(Station_name)
+# sts
+
+sel <- is.na(as.numeric(substr(sts, 3,3)))
+# sts[sel]
+# sts[!sel]
+
+sts_short <- sts
+sts_short[sel] <- substr(sts[sel], 1, 3)
+sts_short[!sel] <- substr(sts[!sel], 1, 4)
+sts_short
+
+# Exclude snail stations
+sel2 <- grepl("G", sts)   # snail stations
+mergedstations_pick <- sts[!sel2] 
+
+```
+
+### Function used for making plots and saving
+```{r}
+check_data_shortcode_save <- function(mergedstation){
+  third_character_is_letter <- is.na(as.numeric(substr(mergedstation, 3,3)))
+  if (third_character_is_letter){
+    shortcode <- substr(mergedstation, 1, 3)
+  } else {
+    shortcode <- substr(mergedstation, 1, 4)
+  }
+  gg <- check_data_shortcode(shortcode)
+  ggsave(sprintf("Figures/Figures_04/%s.png", mergedstation),
+         gg,
+         width = 7, height = 8)
+}
+
+# Test
+# check_data_shortcode_save(mergedstations_pick[1])
+
+```
+
+### Make and save all figures
+```{r}
+mergedstations_pick %>% walk(check_data_shortcode_save)
+
+```
+
+## Checking all stations  
+Using figures made above, saved in `Figures/Figures_04`, plus leaflet map below    
+  
+- All until 26A/26A2 are ok    
+- 26A/26A2 should be reckognized as separate species, and so they are in the file  
+- 28A/28A2 should be reckognized as separate species, and so they are in the file  
+- 43B + 43B1 should be merged (NOTE: not including 43B2  "Tromsø harbour")
+- 43F/43F1 - combine, as they are from N and S of the Olderfjord peninsula. 3 years of data (note: the 43F1 data have been excluded from "dat" as they are for Pluronectes. See below. Should be fixed!)   
+- 45B/45B1 - combine (not including 45B2 - Hammerfest)   
+- 56A + 56A1-6 - are all different stations (A1 -A6 aonly 1-2 years of data)   
+- 57A ++ - as 56A   
+- 98A1 (only two years in start) is separate from 98A2 + A3 (merged). OK. Position of AA is on land!
+- 98F1 + F2: Quite close. OK. (Only data from 98F1 1993-1996 in dat. Why??)
+
+TO CHANGE?
+- 98B2 (only two years, 2000-2001) is a quite different place from 98B1, and concentrations of Cadmium and CB101 (liver) and CB118 (muscle) may be out of place
+
+```{r}
+
+st_short <- "45B"
+
+# Note:
+# 43B2 (Tromsø) isn't in dat_merge (the excel file from Rob) because it is not goinbg to be merged with anything)
+# 45B2 (Hammerfest) - same
+
+sel <- grepl(st_short, dat_ices$StationName); sum(sel)
+dat_ices$StationName[sel] %>% unique()
+
+dat_ices[sel,] %>%
+  count(MYEAR, StationName) %>%
+  ggplot(aes(MYEAR, StationName, color = StationName)) +
+  geom_point(size = rel(3))
+
+df <- dat_merge %>%
+  filter(grepl(st_short, Station_Name)) %>%
+  mutate(Popup = paste(Station_Name, "<b>", StartYear, "-", EndYear))
+
+# Leaflet map
+library(leaflet)
+leaflet() %>%
+  addTiles() %>%
+  addMarkers(lng = df$Lon, lat = df$Lat, popup = df$Popup)
+
+
+```
+
+## Check the stations of "query 2.csv", see mail from Rob 11. desember 2019 19:46
+```{r}
+
+# Rob: "Also, the other stations in query 2.csv aren’t marked for either contaminants in biota or temporal monitoring.  I would expect the contaminants in biota to be marked."
+
+if (FALSE){
+  dat %>%
+    filter(STATION_CODE %in% c("31F")) %>%
+    count(PARAM)
+}
+
+dat %>%
+  filter(STATION_CODE %in% c("31F", "43G1", "41G1", "10G4", "10G3","48G1",
+                             "45B1", "43B1", "43F1", "49G", "45F")) %>%
+  count(STATION_CODE, PARAM) %>%
+  group_by(STATION_CODE) %>%
+  summarise(PARAM = paste(PARAM, collapse = ", "))
+
+# 1. All stations with data (two don't; see 2) have at least TBT, so they are by def. contaminants in biota  stations
+# 2. 43F1 and 45F not included in "dat"
+#   Can be because they have other flatfish species (that were excluded from data
+#   - see below). This is true for 45F (has Pleuronectes platella in 2006-2007).
+
+# Didn't find 43F1 in the ordinary data, but it is in the big excel. It has data fro 43F1 only (not 43F). 
+#   As 45F it has Pleuronectes platella in 2006-2007, and has contaminants (PCB, DDT, some metals). 
+#   See code below:
+
+make_stationtable_shortcode("45F")
+make_stationtable_shortcode("43F1")
+
+datxl %>%
+  filter(`Station Code` %in% "43F1" & Basis %in% "W") %>%
+  count(`Parameter Code`)
+
+datxl %>%
+  filter(`Station Code` %in% "43F1" & Basis %in% "W" & `Parameter Code` %in% "CB118")
+
+# Get data from big excel
+datxl %>%
+  filter(`Station Code` %in% "43F1" & Basis %in% "W" & `Parameter Code` %in% "CB118" & Tissue %in% "LI") %>%
+  select(`Station Code`, `Parameter Code`, Tissue, Basis, `1980`:`2015`) %>%
+  tidyr::pivot_longer(`1980`:`2015`, names_to = "Year", values_to = "Conc") %>%
+  filter(!is.na(Conc))
+
+
+```
+
+Rob: "As for the temporal monitoring element, that might be correct because these stations have only been sampled once but, according to the Notes, 45B1 Revsbotn, 43B1 Leisundet, 43F1 Leisundet replace other stations, suggesting that there is a temporal monitoring element.  What do you think?  (Note that the other stations with Notes aren’t actually associated with any other station."
+```{r}
+make_stationtable_shortcode("45B")  # 1994-1995 (45B) + 2006-2007 (45B1). (Note: exclude 45B2 which is Tromsø)
+make_stationtable_shortcode("43B")  # Loads of years
+
+
+datxl %>%
+  filter(`Station Code` %in% c("43F1", "43F") & Basis %in% "W") %>%
+  select(`Station Code`, `Parameter Code`, Tissue, Basis, `1980`:`2015`) %>%
+  tidyr::pivot_longer(`1980`:`2015`, names_to = "Year", values_to = "Conc") %>%
+  filter(!is.na(Conc)) %>%
+  count(`Station Code`, Year)
+  
+
+
+```
+
+## Why does the 98F stations have so few data?  
+### 98F - check 1    
+```{r}
+make_stationtable(c("98F1","98F2"))
+```
+
+
+### 98F stations - check 2   
+- Checking in the old Access tables   
+- Here we find data for all the years     
+- However, only the years 1993-1996 contains common dab Limanda limanda (skrubbe), most years in combination with other species
+- The years 1997 onwards contains only Pleuronectes platessa (European plaice, rødspette)   
+- In `Milkys_Data_2017_02_14_cemp_comb.R` (folder `Documents/seksjon 212/COCO/Analyser/Data_extraction`), we used the same data source for Access files, but only records with species with N > 1000 was used when making  `cemp_f2`. This was the species `"GADU MOR" "LIMA LIM" "MYTI EDU" "NUCE LAP" "PLAT FLE"`, i.e. not including European plaice.     
+- The data file made in said script, `Milkys_Data_2017_02_14_cemp_combinedtable.RData`, was used in `Milkys_2018/07_Check_and_clean_Access_data.Rmd` which in turn was the source for `08_data_ind2_2018-08-23_usa.csv` used in folder `Milkys` (script `01_Get_chemical_data_NIVAbasen.Rmd`)
+```{r}
+
+station <- "98F"
+station <- "43F1"
+station <- "45F"
+station <- c("227G1", "227G2")
+nc <- nchar(station[1])
+
+folder_db <- "C:/Data/CEMP/2016_Milkys"
+
+# Output 1 - reading file
+df1 <- read_csv2(paste0(folder_db, "/dbo_locality_ny.txt"), )
+# head(df1)
+
+# Output 2 - stations
+df1 %>%
+  filter(substr(jmpst,1,3) %in% station)
+
+
+# Output 1 cont. - reading file
+df2 <- read_csv2(paste0(folder_db, "/dbo_fish_mas.txt"))
+# head(df2)
+
+if (FALSE){
+  df2 %>%
+    filter(substr(jmpst,1,nc) %in% station) %>%
+    count(myear, jmpst, seqno, speci)
+}
+
+# Output 3 - stations
+df2 %>%
+  filter(substr(jmpst,1,nc) %in% station) %>%
+  group_by(myear) %>%
+  summarise(speci = paste(speci, collapse = ", "))
+
+# Include station in the output
+if (FALSE){
+  df2 %>%
+    filter(substr(jmpst,1,nc) %in% station) %>%
+    group_by(jmpst, myear) %>%
+    summarise(speci = paste(speci, collapse = ", "))
+}
+
+
+if (FALSE){
+  seqno_sel <- df2 %>%
+    filter(substr(jmpst,1,nc) %in% station) %>%
+    count(seqno) %>%
+    pull(seqno)
+  
+  df3 <- read_csv2(paste0(folder_db, "/dbo_fish_spe.txt"))
+  df4 <- read_csv2(paste0(folder_db, "/dbo_fish_tis.txt"))
+  df5 <- read_csv2(paste0(folder_db, "/dbo_fish_con.txt"))
+  # head(df3)
+  
+  df3 %>%
+    filter(seqno %in% seqno_sel)
+  df4 %>%
+    filter(seqno %in% seqno_sel)
+  df5 %>%
+    filter(seqno %in% seqno_sel) %>%
+    count(myear)
+}
+
+```
+
+
+### 98F stations - check 3     
+- Code below is from Milkys_2018/07_Check_and_clean_Access_data.Rmd      
+- Only 1993-1996 data, whether we use station code or seqno for checking      
+```{r}
+load("H:/Documents/seksjon 212/COCO/Analyser/Data_extraction/Extracted_R_data/Milkys_Data_2017_02_14_cemp_combinedtable.RData") 
+
+cemp_comb %>%
+  filter(grepl("98F", jmpst)) %>%
+  count(myear)
+
+#
+# File written in this script (and later used in folder "Milkys"):
+#
+# cemp_comb2 <- readRDS("../Milkys_2018/Data/07_cemp_comb.RData")
+# 
+# cemp_comb2 %>%
+#   filter(grepl("98F", jmpst)) %>%
+#   count(myear)
+
+
+```
+
+## Check 227G / 227G1
+
+“In the case of 227G1/227G2, the database has data on 227G2 has been used from 2015 onwards, while the station table indicates that 227G2 was added already in 2003! Perhaps the data have been changed at a later date.”  
+  
+I’ve looked at the ICES extraction: there are data for 227G1 from 1997-2002 and 2013-2014 and data for 227G2 from 2003-2007, 2009, 2015-present.  Any idea why this differs from your database?  We want to make sure that if you resubmit data in the future, the station dictionary will match what you submit.  
+
+```{r}
+
+# MILKYS data from script 10
+df1 <- dat %>%
+  filter(grepl("^227G", STATION_CODE)) %>%
+  count(STATION_CODE, MYEAR) %>%
+  group_by(MYEAR) %>%
+  summarise(milkys = paste(STATION_CODE, collapse = ", ")) %>%
+  arrange(MYEAR)
+
+# ICES data downloaded from ICES
+df2 <- dat_ices %>%
+  mutate(STATION_CODE = stringr::str_extract(StationName, "([^[[:blank:]]]+)")) %>%
+  filter(grepl("^227G", STATION_CODE)) %>%
+  count(STATION_CODE, MYEAR) %>%
+  group_by(MYEAR) %>%
+  summarise(ices = paste(STATION_CODE, collapse = ", ")) %>%
+  arrange(MYEAR)
+
+# Excel
+# datxl %>% pull(`Station Code`) %>% unique %>% sort()
+# 
+df3 <- datxl %>%
+  filter(grepl("^227G", `Station Code`) & Basis %in% "W") %>%
+  select(`Station Code`, `Parameter Code`, Tissue, Basis, `1980`:`2015`) %>%
+  rename(STATION_CODE = `Station Code`) %>%
+  tidyr::pivot_longer(`1980`:`2015`, names_to = "MYEAR", values_to = "Conc") %>%
+  mutate(MYEAR = as.numeric(MYEAR)) %>%
+  filter(!is.na(Conc)) %>%
+  count(STATION_CODE, MYEAR) %>%
+  group_by(MYEAR) %>%
+  summarise(excel = paste(STATION_CODE, collapse = ", ")) %>%
+  arrange(MYEAR)
+# df3
+
+
+# 1. Overview of station names used in both data sets
+df12 <- full_join(df1, df2)
+full_join(df12, df3)
+ 
+# 2. Number of observations in the years with no ICES data (plus 2009, when there *is* ICES data)
+dat %>%
+  filter(grepl("^227G", STATION_CODE) & MYEAR %in% c(1991,2008:2012)) %>%
+  count(STATION_CODE, MYEAR) %>%
+  arrange(MYEAR)
+
+# 3. Parameters in the years with no ICES data (plus 2009, when there *is* ICES data)
+dat %>%
+  filter(grepl("^227G", STATION_CODE) & MYEAR %in% c(1991,2008:2012)) %>%
+  count(STATION_CODE, MYEAR, PARAM) %>%
+  group_by(STATION_CODE, MYEAR) %>%
+  summarise(PARAM = paste(PARAM, collapse = ", "))
+
+
+```
+
+## Checks for questions from Rob 12.1.2020  
+See "Data/Questions for Dag 20200112.docx"   
+  
+### Question 1   
+"According to the grouping file, the following stations are not replaced by anything (i.e. the identifiers in the Notes column appear only once).  I have assumed that I can ignore them from the point of view of establishing ‘replaced_by’ relations.  Please confirm."  
+```{r}
+
+if (FALSE) {
+  
+  # QUESTION 1
+
+  # a. 2006 only
+  dat %>%
+    filter(grepl("41G1", STATION_CODE)) %>%
+    count(STATION_CODE, MYEAR)
+  
+  dat_ices %>%
+    filter(grepl("Feneset", StationName, ignore.case = TRUE)) %>%
+    count(StationName, MYEAR)
+  
+  # 43G1 Lyngneset (Langfjord) i Skjervøy, Finnmark
+  # - 2000 (TBT and VDSI) + 2006
+  # -  plus blue mussel in 43A in other years
+  dat %>%
+    filter(grepl("43G", STATION_CODE)) %>%
+    count(STATION_CODE, MYEAR)
+
+  dat %>%
+    filter(grepl("43G", STATION_CODE) & MYEAR == 2000) %>%
+    count(STATION_CODE, MYEAR, PARAM)
+  
+  dat_ices %>%
+    filter(grepl("Lyngneset", StationName, ignore.case = TRUE)) %>%
+    count(StationName, MYEAR)
+
+  # 48G1 Trollfjorden (Tanafjord)
+  # - 48G has data in 2000 (TBT and VDSI), but that is a completely different place, Mehamn
+  # - 48G1 has data in 2006
+  dat %>%
+    filter(grepl("48G", STATION_CODE)) %>%
+    count(STATION_CODE, MYEAR)
+  
+  dat %>%
+    filter(grepl("43G", STATION_CODE) & MYEAR == 2000) %>%
+    count(STATION_CODE, MYEAR, PARAM)
+
+  dat_ices %>%
+    filter(grepl("trollfjord", StationName, ignore.case = TRUE)) %>%
+    count(StationName, MYEAR)
+  
+  dat_ices %>%
+    filter(grepl("48G", StationName, ignore.case = TRUE)) %>%
+    count(StationName, MYEAR)
+  
+  dat_stdict %>%
+    filter(grepl("48G", Station_Name, ignore.case = TRUE))
+  
+  # d. 2006 only, plus blue mussel in 49A in other years
+  dat %>%
+    filter(grepl("49G", STATION_CODE)) %>%
+    count(STATION_CODE, MYEAR)
+  
+  dat_ices %>%
+    filter(grepl("syltefjord", StationName, ignore.case = TRUE)) %>%
+    count(StationName, MYEAR)
+  
+}
+
+```
+
+### Question 2   
+
+"I went through all the stations in the Norwegian station dictionary and the two below had Notes but weren’t in the grouping file (I don’t know how they got missed!).  Do they need to be involved in any ‘replaced-by’ relation?  Given that neither of them have EndYears, I would assume not.  Please confirm.  "   
+- 30J Spro   
+- 30K Storegrunn     
+
+```{r}
+fish_mas <- read.csv2("C:/Data/CEMP/2015_Milkys/dbo_fish_mas.txt", stringsAsFactors = FALSE)
+fish_spe <- read.csv2("C:/Data/CEMP/2015_Milkys/dbo_fish_spe.txt", stringsAsFactors = FALSE)
+fish_tis <- read.csv2("C:/Data/CEMP/2015_Milkys/dbo_fish_tis.txt", stringsAsFactors = FALSE)
+fish_con <- read.csv2("C:/Data/CEMP/2015_Milkys/dbo_fish_con.txt", stringsAsFactors = FALSE)
+fish_becon <- read.csv2("C:/Data/CEMP/2015_Milkys/dbo_fish_becon.txt", stringsAsFactors = FALSE)
+
+fish_mas$myear <- as.numeric(fish_mas$myear)
+
+```
+
+30J and 30K appear to be shrimp stations   
+```{r}
+
+xtabs(~addNA(myear), fish_spe)
+xtabs(~addNA(subno), fish_spe)
+xtabs(~addNA(tissu), fish_tis)
+
+# fish_spe %>% filter(myear == 1995 & seqno %in% c(8309,9309))
+
+df <- fish_mas %>%
+  filter(jmpst %in% c("30J", "30K")) %>%
+  left_join(fish_spe, by = c("myear", "seqno", "rlabo")) %>%  # xtabs(~subno, .)
+  left_join(fish_tis, by = c("myear", "seqno", "rlabo", "subno"))
+
+xtabs(~addNA(tissu), df)
+
+df1 <- df %>%
+  left_join(fish_con, by = c("myear", "seqno", "rlabo", "subno", "tissu"))
+# df2 <- df %>%
+#   left_join(fish_becon, by = c("myear", "seqno", "rlabo", "subno", "tissu"))
+
+nrow(df1)
+
+df1 %>%
+  count(jmpst, myear, speci, tissu, cmnt1.x, param)
+
+
+```
+
+### Question 3
+
+"Confirm that 2007 is the end date of 43F1"  
+  
+4603 = "43F1 Leisundet"  
+43F exists only in 1996  
+43F1 Leisundet exists only in 2006-2007 
+```{r}
+
+if (FALSE) {
+
+    
+  dat_stdict %>%
+    filter(tblStationNameID == 4703) %>%
+    select(tblStationNameID, Station_Name)
+
+  # a. 2006 only
+  dat %>%
+    filter(grepl("43F", STATION_CODE)) %>%
+    count(STATION_CODE, MYEAR)
+  
+  dat_ices %>%
+    filter(grepl("leisund", StationName, ignore.case = TRUE)) %>%
+    count(StationName, MYEAR)
+  
+  fish_mas %>%
+    filter(grepl("43F", jmpst)) %>%
+    select(rlabo, myear, seqno, jmpst)
+
+}
+
+```
+
+
+```{r}
+
+```
+
