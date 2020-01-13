@@ -1,0 +1,463 @@
+---
+title: "03_Check_Norwegian_data"
+author: "DHJ"
+date: "17 12 2019"
+output: html_document
+---
+
+## 1. Libs
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readr)
+
+source("03_Check_Norwegian_data_spec.R", encoding = "UTF-8")
+
+```
+
+## 2. Read MILKYS data  
+```{r}
+dat <- readRDS("../Milkys/Data/10_data_all.RData")
+
+dat01 <- readRDS("../Milkys/Data/01_dat_all.rds")
+
+str(dat)
+
+# Not a good result
+# datxl <- readxl::read_excel("Input_data/Trendtabell_20160919_Komplett_v4_GSE med samletabell.xlsx")
+datxl <- readr::read_csv2(
+  "Input_data/Trendtabell_20160919_Komplett_v4_GSE med samletabell.csv",
+  col_types = spec_bigexcel
+  )
+
+# spec(datxl)
+
+```
+
+## 3. Check up on the 98B stations  
+After questions from Rob
+```{r}
+dat %>% 
+  filter(substr(STATION_CODE,1,3) %in% "98B") %>%
+  count(MYEAR, STATION_CODE) %>%
+  pivot_wider(names_from = STATION_CODE, values_from = n)
+
+```
+
+## 4. Check up on some other stations not marked 
+After questions from Rob   
+
+### 45B  
+- 10 years of data
+- Seems clear that 45B2 (Hammerfest harbour area) actually differs from the others.  
+- Perhaps also 45B (Hammerfest area) differs from 45B1  
+```{r}
+short_code <- "45B"
+no_letters <- nchar(short_code)
+
+# Number of years
+dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  count(MYEAR) %>%
+  nrow()  
+
+# Species and tissues
+dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  count(LATIN_NAME, TISSUE_NAME, STATION_CODE)
+
+# Years
+dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  count(MYEAR, STATION_CODE) %>%
+  pivot_wider(names_from = STATION_CODE, values_from = n)
+
+# Check percentages of different PCBs
+tb <- dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  filter(substr(PARAM,1,2) %in% "CB") %>%
+  group_by(MYEAR, PARAM) %>%
+  summarize(Conc = median(VALUE_WW)) %>%
+  pivot_wider(names_from = PARAM, values_from = Conc)
+tb2 <- tb <- tb[,1:10]
+for (i in 3:10) tb2[,i] <- round(tb2[,i]/tb2[,2]*100, 1)
+tb2
+
+# Select some parameters
+df <- dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  filter(PARAM %in% c("CD", "HG", "CB101", "CB180"))
+
+# Show medians
+df %>%
+  group_by(TISSUE_NAME, MYEAR, PARAM) %>%
+  summarize(Conc = median(VALUE_WW)) %>%
+  pivot_wider(names_from = PARAM, values_from = Conc)
+
+# Show medians, graph
+df %>%
+  group_by(MYEAR, STATION_CODE, TISSUE_NAME, PARAM) %>%
+  summarize(Conc = median(VALUE_WW)) %>%
+  ggplot(aes(MYEAR, Conc, color = STATION_CODE)) +
+  geom_point() +
+  # scale_y_log10() +
+  facet_wrap(vars(TISSUE_NAME, PARAM), scales = "free_y")
+  # facet_grid(rows = vars(TISSUE_NAME), cols = vars(PARAM), scales = "free_y")
+
+
+
+```
+
+
+
+### 43F  
+- Only on year of data (1996)  
+- But the old excel table ("Trendtabell_20160919_Komplett_v4_GSE med samletabell.xlsx") has no 43F, but has 43F1 in 2006-07?!  
+```{r}
+short_code <- "43F"
+no_letters <- nchar(short_code)
+
+# Number of years
+dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  count(MYEAR) %>%
+  nrow()  
+
+# Species and tissues
+dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  count(LATIN_NAME, TISSUE_NAME, STATION_CODE)
+
+# Years
+dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  count(MYEAR, STATION_CODE) %>%
+  pivot_wider(names_from = STATION_CODE, values_from = n)
+
+# Check percentages of different PCBs
+tb <- dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  filter(substr(PARAM,1,2) %in% "CB") %>%
+  group_by(MYEAR, PARAM) %>%
+  summarize(Conc = median(VALUE_WW)) %>%
+  pivot_wider(names_from = PARAM, values_from = Conc)
+tb2 <- tb <- tb[,1:10]
+for (i in 3:10) tb2[,i] <- round(tb2[,i]/tb2[,2]*100, 1)
+tb2
+
+# Select some parameters
+df <- dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  filter(PARAM %in% c("CD", "HG", "CB101", "CB180"))
+
+# Show medians
+df %>%
+  group_by(TISSUE_NAME, MYEAR, PARAM) %>%
+  summarize(Conc = median(VALUE_WW)) %>%
+  pivot_wider(names_from = PARAM, values_from = Conc)
+
+# Show medians, graph
+df %>%
+  group_by(MYEAR, STATION_CODE, TISSUE_NAME, PARAM) %>%
+  summarize(Conc = median(VALUE_WW)) %>%
+  ggplot(aes(MYEAR, Conc, color = STATION_CODE)) +
+  geom_point() +
+  # scale_y_log10() +
+  facet_wrap(vars(TISSUE_NAME, PARAM), scales = "free_y")
+  # facet_grid(rows = vars(TISSUE_NAME), cols = vars(PARAM), scales = "free_y")
+
+```
+
+
+
+### 98F    
+- Find only 98F, 4 years  
+```{r}
+
+short_code <- "98F"
+no_letters <- nchar(short_code)
+
+# Number of years
+dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  count(MYEAR) %>%
+  nrow()  
+
+# Species and tissues
+dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  count(LATIN_NAME, TISSUE_NAME, STATION_CODE)
+
+# Years
+dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  count(MYEAR, STATION_CODE) %>%
+  pivot_wider(names_from = STATION_CODE, values_from = n)
+
+# Check percentages of different PCBs
+tb <- dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  filter(substr(PARAM,1,2) %in% "CB") %>%
+  group_by(MYEAR, PARAM) %>%
+  summarize(Conc = median(VALUE_WW)) %>%
+  pivot_wider(names_from = PARAM, values_from = Conc)
+tb2 <- tb <- tb[,1:10]
+for (i in 3:10) tb2[,i] <- round(tb2[,i]/tb2[,2]*100, 1)
+tb2
+
+# Select some parameters
+df <- dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  filter(PARAM %in% c("CD", "HG", "CB101", "CB180"))
+
+# Show medians
+df %>%
+  group_by(TISSUE_NAME, MYEAR, PARAM) %>%
+  summarize(Conc = median(VALUE_WW)) %>%
+  pivot_wider(names_from = PARAM, values_from = Conc)
+
+# Show medians, graph
+df %>%
+  group_by(MYEAR, STATION_CODE, TISSUE_NAME, PARAM) %>%
+  summarize(Conc = median(VALUE_WW)) %>%
+  ggplot(aes(MYEAR, Conc, color = STATION_CODE)) +
+  geom_point() +
+  # scale_y_log10() +
+  facet_wrap(vars(TISSUE_NAME, PARAM), scales = "free_y")
+  # facet_grid(rows = vars(TISSUE_NAME), cols = vars(PARAM), scales = "free_y")
+
+```
+
+
+### 92A  
+92A1 1992-1997, 92A2 2005 
+```{r}
+short_code <- "92A"
+no_letters <- nchar(short_code)
+
+# Species and tissues
+dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  count(LATIN_NAME, TISSUE_NAME, STATION_CODE)
+
+# Years
+dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  count(MYEAR, STATION_CODE) %>%
+  pivot_wider(names_from = STATION_CODE, values_from = n)
+
+# Check percentages of different PCBs
+tb <- dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  filter(substr(PARAM,1,2) %in% "CB") %>%
+  group_by(MYEAR, PARAM) %>%
+  summarize(Conc = median(VALUE_WW)) %>%
+  pivot_wider(names_from = PARAM, values_from = Conc)
+tb2 <- tb <- tb[,1:10]
+for (i in 3:10) tb2[,i] <- round(tb2[,i]/tb2[,2]*100, 1)
+tb2
+
+# Select some parameters
+df <- dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  filter(PARAM %in% c("CD", "HG", "CB101", "CB180"))
+
+# Show medians
+df %>%
+  group_by(TISSUE_NAME, MYEAR, PARAM) %>%
+  summarize(Conc = median(VALUE_WW)) %>%
+  pivot_wider(names_from = PARAM, values_from = Conc)
+
+# Show medians, graph
+df %>%
+  group_by(MYEAR, STATION_CODE, TISSUE_NAME, PARAM) %>%
+  summarize(Conc = median(VALUE_WW)) %>%
+  ggplot(aes(MYEAR, Conc, color = STATION_CODE)) +
+  geom_point() +
+  # scale_y_log10() +
+  facet_wrap(vars(TISSUE_NAME, PARAM), scales = "free_y")
+  # facet_grid(rows = vars(TISSUE_NAME), cols = vars(PARAM), scales = "free_y")
+
+```
+
+### 227G  
+92A1 1992-1997, 92A2 2005 
+```{r}
+short_code <- "227G"
+no_letters <- nchar(short_code)
+
+# Species and tissues
+dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  count(LATIN_NAME, TISSUE_NAME, STATION_CODE)
+
+# Years
+dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  count(MYEAR, STATION_CODE) %>%
+  pivot_wider(names_from = STATION_CODE, values_from = n)
+
+# Check percentages of different PCBs
+tb <- dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  filter(substr(PARAM,1,2) %in% "CB") %>%
+  group_by(MYEAR, PARAM) %>%
+  summarize(Conc = median(VALUE_WW)) %>%
+  pivot_wider(names_from = PARAM, values_from = Conc)
+tb2 <- tb <- tb[,1:10]
+for (i in 3:10) tb2[,i] <- round(tb2[,i]/tb2[,2]*100, 1)
+tb2
+
+# Select some parameters
+df <- dat %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  filter(PARAM %in% c("CD", "HG", "CB101", "CB180"))
+
+# Show medians
+df %>%
+  group_by(TISSUE_NAME, MYEAR, PARAM) %>%
+  summarize(Conc = median(VALUE_WW)) %>%
+  pivot_wider(names_from = PARAM, values_from = Conc)
+
+# Show medians, graph
+df %>%
+  group_by(MYEAR, STATION_CODE, TISSUE_NAME, PARAM) %>%
+  summarize(Conc = median(VALUE_WW)) %>%
+  ggplot(aes(MYEAR, Conc, color = STATION_CODE)) +
+  geom_point() +
+  # scale_y_log10() +
+  facet_wrap(vars(TISSUE_NAME, PARAM), scales = "free_y")
+  # facet_grid(rows = vars(TISSUE_NAME), cols = vars(PARAM), scales = "free_y")
+
+```
+
+
+```{r}
+
+summarize_sequence <- function(x){
+  x <- sort(unique(x))
+  dx <- diff(x)
+  df <- tibble(
+    x = x,
+    index = cumsum(c(1, dx) > 1) + 1)
+  df %>% 
+    group_by(index) %>%
+    summarize(Min = min(x),Max = max(x)) %>%
+    mutate(Summ = ifelse(Min < Max, paste0(Min,"-",Max), Min)) %>%
+    ungroup() %>%
+    summarize(Summ = paste0(Summ, collapse = ",")) %>%
+    pull(Summ)
+}
+
+# summarize_sequence(c(1,2,5,6,7,9,10,11,12))
+
+
+```
+
+
+## Compare station codes in database and in the big Excel file of Tore (THO)
+
+### Example: 227G  
+92A1 1992-1997, 92A2 2005 
+```{r}
+
+short_code <- "227G"
+no_letters <- nchar(short_code)
+
+# Stations and years in the database
+data_yrs <- dat01 %>% 
+  filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+  group_by(MYEAR, STATION_CODE) %>%
+  summarise(n_data = n())
+
+# Big excel file - confirm unique records
+datxl %>%
+  filter(substr(`Station Code`, 1, no_letters) %in% short_code) %>%
+  count(`Parameter Code`, `Station Code`, `Species`, `Tissue`, `Basis`) %>%
+  count(n)
+  
+# Big excel file - put on long format
+datxl_long <- datxl %>%
+  filter(substr(`Station Code`, 1, no_letters) %in% short_code) %>%
+  select(`Parameter Code`, `Station Code`, `Species`, `Tissue`, `Basis`, `1980`:`2015`) %>%
+  pivot_longer(cols = `1980`:`2015`, names_to = "MYEAR", values_to = "VALUE") %>%
+  mutate(MYEAR = as.numeric(MYEAR)) %>%
+  rename(STATION_CODE = `Station Code`)
+
+# Stations and years in the big excel file
+xlfile_yrs <- datxl_long %>%
+  filter(VALUE != "") %>%
+  group_by(MYEAR, STATION_CODE) %>%
+  summarise(n_xl = n())
+
+# Stations and years in the database and in the big excel file, combined
+compare_yrs <- full_join(data_yrs, xlfile_yrs) %>%
+  ungroup()
+
+# Compare
+compare_yrs %>%
+  group_by(STATION_CODE) %>%
+  summarise(
+    database_only = summarize_sequence(MYEAR[n_data > 0 & is.na(n_xl)]),
+    both = summarize_sequence(MYEAR[!is.na(n_data) & !is.na(n_xl)]),
+    excel_only = summarize_sequence(MYEAR[is.na(n_data) & n_xl > 0])
+    )
+
+
+```
+
+### Function  
+```{r}
+check_stations <- function(short_code){
+  no_letters <- nchar(short_code)
+  
+  # Stations and years in the database
+  data_yrs <- dat01 %>% 
+    filter(substr(STATION_CODE,1, no_letters) %in% short_code) %>%
+    group_by(MYEAR, STATION_CODE) %>%
+    summarise(n_data = n())
+  
+  # Big excel file - put on long format
+  datxl_long <- datxl %>%
+    filter(substr(`Station Code`, 1, no_letters) %in% short_code) %>%
+    select(`Parameter Code`, `Station Code`, `Species`, `Tissue`, `Basis`, `1980`:`2015`) %>%
+    pivot_longer(cols = `1980`:`2015`, names_to = "MYEAR", values_to = "VALUE") %>%
+    mutate(MYEAR = as.numeric(MYEAR)) %>%
+    rename(STATION_CODE = `Station Code`)
+  
+  # Stations and years in the big excel file
+  xlfile_yrs <- datxl_long %>%
+    filter(VALUE != "") %>%
+    group_by(MYEAR, STATION_CODE) %>%
+    summarise(n_xl = n())
+  
+  # Stations and years in the database and in the big excel file, combined
+  compare_yrs <- full_join(data_yrs, xlfile_yrs, by = c("MYEAR", "STATION_CODE")) %>%
+    ungroup()
+  
+  # Compare
+  compare_yrs %>%
+    group_by(STATION_CODE) %>%
+    summarise(
+      database_only = summarize_sequence(MYEAR[n_data > 0 & is.na(n_xl)]),
+      both = summarize_sequence(MYEAR[!is.na(n_data) & !is.na(n_xl)]),
+      excel_only = summarize_sequence(MYEAR[is.na(n_data) & n_xl > 0])
+    )
+  
+}
+
+# check_stations("227G")
+```
+
+### Checking
+```{r}
+check_stations("45B")
+check_stations("43F")
+check_stations("98F")
+check_stations("92A")
+check_stations("227G")
+
+```
+
+
