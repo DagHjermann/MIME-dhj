@@ -1,0 +1,174 @@
+---
+title: "05: Check CEMP Appendices"
+author: "DHJ"
+date: "27 2 2020"
+output: html_document
+---
+
+For different groups of chemicals, check first year of data, in order to set as *Temporal scope* first year  
+
+## 1. Packages and functions  
+```{r}
+
+library(plyr)
+library(dplyr)
+library(purrr)
+
+source('../Milkys/00_read_ICES_webservice_functions.R', encoding = 'ANSI_X3.4-1986')
+
+# Downloaded from https://vocab.ices.dk/?ref=22
+df_countries <- read.csv('../Milkys/00_read_ICES_webservice_functions_countries.csv', encoding = 'UTF-8')
+
+# Downloaded from 
+df_parametergroups <- read.csv('../Milkys/00_read_ICES_webservice_functions_groups.csv', encoding = 'UTF-8')
+
+
+```
+
+```{r}
+"http://dome.ices.dk/Webservices/DOMEWebServices.asmx/selectContaminantsInSediment?PARAM=CD&RLABO=ALUK&ALABO=&yearBegining=&yearEnd=&MATRX=&TAXA=&PURPM=&MPROG=&Area=&CNTRY=&ParamGroup="
+```
+
+
+## 2. Countrycodes and function
+```{r}
+
+df_countries <- df_countries %>%
+  filter(Description %in% c("Iceland", "Norway", "Denmark", "Sweden", "Germany", "The Netherlands", "Belgium",
+                            "United Kingdom", "Ireland", "France", "Spain", "Portugal")
+  
+)
+
+get_ices_biotadata_polite <- function(...){
+  result <- get_ices_biotadata(...)
+  Sys.sleep(1)
+  result
+}
+# Test 1
+# df <- get_ices_biotadata_polite("TBTIN", yearstart = 2010, yearend = 2018, country = 74)
+#	Test 2: Get all data for a parameter group, here: dioxins (OC-DX) in Norway
+# df <- get_ices_biotadata_polite(
+#   "", yearstart = 1990, yearend = 2000, country = 58, paramgroup = "OC-DX")
+
+#
+# Get biota data from several countries:
+#
+get_ices_biotadata_all <- function(param, countrycodes,
+                                   yearstart = NULL, yearend = yearstart, 
+                                   country = "", matrix = "", lab = "", species = "",
+                                   paramgroup = ""){
+  codes <- countrycodes
+  names(codes) <- countrycodes
+  codes %>% 
+    map_df(~get_ices_biotadata_polite(param, country = as.character(.), 
+                               yearstart = yearstart, yearend = yearend, matrix = matrix,
+                               lab = lab, species = species, paramgroup = paramgroup),
+           .id = "Code")
+}
+
+# Tests
+ test1 <- get_ices_biotadata_all("TBTIN", countrycodes = c(74,77), yearstart = 2010, yearend = 2018)  # UK,  test1 <- get_ices_biotadata_all("TBTIN", countrycodes = c(74,77), yearstart = 2010, yearend = 2018)  # UK, Sweden
+# test2 <- get_ices_biotadata_all("CB118", countrycodes = df_countries$Code, yearstart = 2017, yearend = 2019)  # All countries
+
+get_ices_sedimentdata_polite <- function(...){
+  result <- get_ices_sedimentdata(...)
+  Sys.sleep(1)
+  result
+}
+get_ices_sedimentdata_polite("CD", yearstart = 1996, country = 74)
+
+#
+# Get sediment data from several countries:
+#
+get_ices_sedimentdata_all <- function(param, countrycodes,
+                                   yearstart = NULL, yearend = yearstart, 
+                                   country = "", lab = "", 
+                                   paramgroup = ""){
+  codes <- countrycodes
+  names(codes) <- countrycodes
+  codes %>% 
+    map_df(~get_ices_sedimentdata(param, country = as.character(.), 
+                               yearstart = yearstart, yearend = yearend, 
+                               lab = lab, paramgroup = paramgroup),
+           .id = "Code")
+}
+# test3 <- get_ices_sedimentdata_all("CD", yearstart = 1996, countrycodes = df_countries$Code)    
+# xtabs(~Country, test3)
+ 
+```
+
+## 3a. Appendix H6: Planar PCBs in biota       
+- CB15,  CB37,  CB77,  CB81, CB126 , CB169
+
+```{r, results='hide', message=FALSE}
+df_ices <- c("CB15",  "CB37",  "CB77",  "CB81", "CB126", "CB169") %>%
+  map_df(~get_ices_biotadata_all(., countrycodes = df_countries$Code, yearstart = 1970, yearend = 2019))  # UK, Sweden
+table(df_ices$Code)
+
+```
+
+#### Result
+```{r}
+
+xtabs(~MYEAR + PARAM, df_ices)
+xtabs(~MYEAR + Country + grepl("CEMP", MPROG), df_ices)
+
+```
+
+
+## 3b. Appendix H6: Check planar PCBs in sediment   
+- CB15,  CB37,  CB77,  CB81, CB126 , CB169  
+```{r}
+
+df_ices <- c("CB15",  "CB37",  "CB77",  "CB81", "CB126", "CB169") %>%
+  map_df(~get_ices_sedimentdata_all(., countrycodes = df_countries$Code, yearstart = 1970, yearend = 2019))  # UK, Sweden
+table(df_ices$Code)
+
+```
+
+#### Result
+```{r}
+xtabs(~MYEAR + PARAM, df_ices)
+xtabs(~MYEAR + Country + grepl("CEMP", MPROG), df_ices)
+
+```
+
+## 4. Appendix H9: Check PCDF in sediment and biota    
+I.e., Polychlorinated dibenzodioxins and furans   
+E.g., 
+- CDD1N =	1,2,3,7,8-pentachlorodibenzo-p-dioxin     
+- CDD9X = 1,2,3,7,8,9-hexachlorodibenzo-p-dioxin   
+- CDF2T = 2,3,7,8-tetrachloro-dibenzofuran
+   
+Earliest data are from **1995**  
+```{r}
+df_dioxins <- get_ices_biotadata_all("", countrycodes = df_countries$Code, 
+                                     yearstart = 1970, yearend = 2019,
+                                     paramgroup = "OC-DX")  # see df_parametergroups
+
+table(df_dioxins$Code)
+xtabs(~MYEAR + PARAM, df_dioxins)
+xtabs(~MYEAR + Country + grepl("CEMP", MPROG), df_dioxins)
+
+```
+
+## 5. Appendix H10: PAH and metal-specific relevant Biological Effects   
+
+- Includes PAH metabolites + ALA-D, and EROD ("the EROD catalytic enzyme assay is the technique recommended for monitoring CYP 1A activity")  
+- Probably NOT on this group:  
+    * %HCT = hematocrit - volume percentage of red blood cells in blood   
+    * CAT = catalase activity (Unit example: micromol/min/mg protein)   
+   
+Earliest year = **1989** (EROD in Sweden)    
+```{r}
+df_biol <- get_ices_biotadata_all("", countrycodes = df_countries$Code, 
+                                     yearstart = 1970, yearend = 2019,
+                                     paramgroup = "B-MBA")  # see df_parametergroups
+
+table(df_biol$Code)
+xtabs(~MYEAR + PARAM, df_biol %>% filter(grepl("CEMP", MPROG)))
+xtabs(~MYEAR + Country + grepl("CEMP", MPROG), df_biol)
+
+xtabs(~MYEAR + grepl("CEMP", MPROG), df_biol)
+
+```
