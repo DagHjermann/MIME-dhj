@@ -1,0 +1,1007 @@
+---
+title: "Time trends in blue mussel, comparing wet-weight and dry weight concentrations"
+author: "DHJ"
+date: "24 11 2020"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+  
+---
+
+
+```{r, echo=FALSE, results='hide', warning=FALSE, message=FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(htmlTable)
+
+setHtmlTableTheme(css.rgroup = "font-weight: normal",
+                  css.cgroup = "font-weight: normal",
+                  css.header = "font-weight: normal")
+
+
+```
+
+```{r, echo = FALSE}
+
+#
+# Functions for Deming (orthogonal) regression
+# a.k.a total sum-of-squares regression
+#   (i.e. it is assumed that there are errors in both x and y)  
+# By default, the noise_ratio (the ratio between y and x errors) is 
+#   assumed to equal sd(y)/sd(x)  
+#
+# From
+# https://stackoverflow.com/a/59172951/1734247
+#
+
+deming.fit <- function(x, y, noise_ratio = sd(y)/sd(x)) {
+  if(missing(noise_ratio) || is.null(noise_ratio)) noise_ratio <- eval(formals(sys.function(0))$noise_ratio) # this is just a complicated way to write `sd(y)/sd(x)`
+  delta <-  noise_ratio^2
+  x_name <- deparse(substitute(x))
+
+  s_yy <- var(y)
+  s_xx <- var(x)
+  s_xy <- cov(x, y)
+  beta1 <- (s_yy - delta*s_xx + sqrt((s_yy - delta*s_xx)^2 + 4*delta*s_xy^2)) / (2*s_xy)
+  beta0 <- mean(y) - beta1 * mean(x) 
+
+  res <- c(beta0 = beta0, beta1 = beta1)
+  names(res) <- c("(Intercept)", x_name)
+  class(res) <- "Deming"
+  res
+}
+
+deming <- function(formula, data, R = 100, noise_ratio = NULL, ...){
+  ret <- boot::boot(
+    data = model.frame(formula, data), 
+    statistic = function(data, ind) {
+      data <- data[ind, ]
+      args <- rlang::parse_exprs(colnames(data))
+      names(args) <- c("y", "x")
+      rlang::eval_tidy(rlang::expr(deming.fit(!!!args, noise_ratio = noise_ratio)), data, env = rlang::current_env())
+    },
+    R=R
+  )
+  class(ret) <- c("Deming", class(ret))
+  ret  
+}
+
+predictdf.Deming <- function(model, xseq, se, level) {
+  pred <- as.vector(tcrossprod(model$t0, cbind(1, xseq)))
+  if(se) {
+    preds <- tcrossprod(model$t, cbind(1, xseq))
+    data.frame(
+      x = xseq,
+      y = pred,
+      ymin = apply(preds, 2, function(x) quantile(x, probs = (1-level)/2)),
+      ymax = apply(preds, 2, function(x) quantile(x, probs = 1-((1-level)/2)))
+    )
+  } else {
+    return(data.frame(x = xseq, y = pred))
+  }
+}
+
+
+```
+
+
+```{r, echo=FALSE}
+
+df1 <- readRDS("OSPAR_MIME_2020/shellfish_ww_2020.rds")
+df2 <- readRDS("OSPAR_MIME_2020/shellfish_dw_2021.rds")
+
+
+# names(df1) 
+# names(df2)
+# names(df1) %>% paste(collapse = ", ")
+
+
+#
+# Check which variables defines unique blue mussel records 
+#
+if (FALSE){
+
+df1 %>%
+  filter(species == "Mytilus edulis") %>%
+  distinct(region, subregion, ICES_ecoregion, country, station_code, station_name, station_long_name, 
+           latitude, longitude, MSTAT, WLTYP, determinand, determinand_group, species, 
+           matrix, basis, unit, sex, metoa, mammal_group) %>%
+  nrow()
+
+df1 %>%
+  filter(species == "Mytilus edulis") %>%
+  distinct(country, station_code, determinand, matrix, basis, unit) %>%
+  nrow()
+
+}
+
+```
+
+```{r, echo=FALSE}
+
+## Join  
+
+### Change names of regression variables
+
+# names(df1) %>% dput()
+
+vars <- c(
+  "n_year_all", "n_year_fit", "n_year_positive", "first_year_all", 
+  "first_year_fit", "last_year", "p_nonlinear", "p_linear", "p_overall", 
+  "p_linear_trend", "linear_trend", "p_recent_trend", "recent_trend", 
+  "detectable_trend", "mean_last_year", "climit_last_year", "BAC", 
+  "BAC_diff", "BAC_achieved", "BAC_below", "EAC", "EAC_diff", "EAC_achieved", 
+  "EAC_below", "MPC", "MPC_diff", "MPC_achieved", "MPC_below", 
+  "FEQG", "FEQG_diff", "FEQG_achieved", "FEQG_below", "imposex_class")
+
+for (var in vars){
+  names(df1)[names(df1) == var] <- paste0(var, "_ww")
+  names(df2)[names(df2) == var] <- paste0(var, "_dw")
+}
+
+
+```
+
+```{r, echo=FALSE, results='hide', message=FALSE}
+
+### The actual join  
+
+# names(df1) %>% dput()
+
+df <- df1 %>% 
+  filter(species == "Mytilus edulis") %>%
+  select(region, subregion, ICES_ecoregion, country, station_code, station_name, station_long_name, 
+           latitude, longitude, MSTAT, WLTYP, determinand, determinand_group, species, 
+           matrix, basis, unit, sex, metoa, mammal_group,
+         n_year_all_ww:imposex_class_ww) %>%
+  left_join(
+    df2 %>%
+      filter(species == "Mytilus edulis") %>%
+      select(country, station_code, determinand,   # matrix, basis, unit,
+           n_year_all_dw:imposex_class_dw)
+  )
+
+nrow(df1)
+nrow(filter(df1, species == "Mytilus edulis"))
+nrow(df)
+
+```
+
+
+## Statistics   
+All statistics are for blue mussel   
+
+### Overview     
+Number of blue mussel time series per country    
+```{r, echo=FALSE}
+
+df %>%
+  filter(species == "Mytilus edulis") %>% # View()
+  xtabs(~ determinand_group + country, .)
+
+```
+
+### Number of significant linear trends   
+For metals and chlorobiphenyls separately 
+```{r, echo=FALSE, results = 'asis'}
+
+for (group in c("Metals", "Chlorobiphenyls", "Polybrominated diphenyl ethers", 
+                "PAH parent compounds", "Organochlorines (other)")){
+  df %>%
+    filter(species == "Mytilus edulis" & 
+             determinand_group %in% group) %>% # View()
+    xtabs(~ (p_linear_trend_ww <= 0.05) + (p_linear_trend_dw <= 0.05), .) %>%
+    htmlTable(caption = group) %>%
+    print()
+}
+
+
+```
+
+
+### Trends, up & down 
+```{r, echo=FALSE}
+
+trend_order <- c(
+  "declining (ww & dw)", "declining (ww only)", "declining (dw only)", 
+  "increasing (ww & dw)", "increasing (ww only)", "increasing (dw only)", 
+  "declining ww, increasing dw", "increasing ww, declining dw", 
+  "no trend (ww & dw)")
+
+df %>%
+  filter(species == "Mytilus edulis" &
+           determinand_group %in% c("Metals", "Chlorobiphenyls", "Polybrominated diphenyl ethers", 
+                "PAH parent compounds", "Organochlorines (other)")) %>% 
+  mutate(
+    determinand_group = levels(determinand_group)[as.numeric(determinand_group)],
+    Trend = case_when(
+      p_linear_trend_ww <= 0.05 & linear_trend_ww < 0 & p_linear_trend_dw <= 0.05 & linear_trend_dw < 0 ~ "declining (ww & dw)", 
+      p_linear_trend_ww <= 0.05 & linear_trend_ww < 0 & p_linear_trend_dw > 0.05 ~ "declining (ww only)", 
+      p_linear_trend_dw <= 0.05 & linear_trend_dw < 0 & p_linear_trend_ww > 0.05 ~ "declining (dw only)", 
+      p_linear_trend_ww <= 0.05 & linear_trend_ww > 0 & p_linear_trend_dw <= 0.05 & linear_trend_dw > 0 ~ "increasing (ww & dw)", 
+      p_linear_trend_ww <= 0.05 & linear_trend_ww > 0 & p_linear_trend_dw > 0.05 ~ "increasing (ww only)", 
+      p_linear_trend_dw <= 0.05 & linear_trend_dw > 0 & p_linear_trend_ww > 0.05~ "increasing (dw only)", 
+      p_linear_trend_ww <= 0.05 & linear_trend_ww < 0 & p_linear_trend_dw <= 0.05 & linear_trend_dw > 0 ~ "declining ww, increasing dw", 
+      p_linear_trend_ww <= 0.05 & linear_trend_ww > 0 & p_linear_trend_dw <= 0.05 & linear_trend_dw < 0 ~ "increasing ww, declining dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "no trend (ww & dw)"),
+    Trend = factor(Trend, levels = trend_order)
+  ) %>%
+  xtabs(~ Trend + determinand_group, .) %>%
+  htmlTable()
+
+```
+
+
+
+
+## Plots of slope of linear trends   
+
+X axis: Slope of time trend (i.e., change per year), wet-weight concentration   
+Y axis: Slope of time trend (i.e., change per year), wet-weight concentration   
+
+* Red line: Regression line (red) calculated using Deming (orthogonal) regression   
+* Blue dotted line: 1:1 line (same trend using w.w. and d.w. concentration)        
+
+### Overall per group   
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.height=4, fig.width=8}
+
+p_levels <- c("ww and dw", "ww", "dw", "none") 
+p_colors <- c("red3", "magenta", "dodgerblue", "grey35")
+names(p_colors) <- p_levels
+
+
+df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% c("Metals", "Chlorobiphenyls")) %>% # View()
+  mutate(
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(linear_trend_ww, linear_trend_dw)) +
+  geom_point(aes(color = `P < 0.05`)) +
+  scale_color_manual(values = p_colors) +
+  geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
+  geom_smooth(method = "deming", color = "red", size = 1) +
+  facet_wrap(vars(determinand_group))
+
+```
+
+
+## Individual compounds {.tabset }  
+
+
+### PCBs
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=9, fig.height=7}
+
+
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Chlorobiphenyls") %>% # View()
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  mutate(
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(linear_trend_ww, linear_trend_dw, text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`)) +
+  scale_color_manual(values = p_colors) +
+  geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand))
+
+gg + geom_smooth(method = "deming", color = "red", size = 1)
+
+```
+
+### PCBs (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + geom_smooth(method = "deming", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+### Metals  
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=9, fig.height=7}
+
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Metals") %>%
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  mutate(
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(linear_trend_ww, linear_trend_dw, text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`)) +
+  scale_color_manual(values = p_colors) +
+  geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand))
+
+gg + geom_smooth(method = "deming", color = "red", size = 1)
+ 
+```
+
+### Metals (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + geom_smooth(method = "deming", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+
+## Individual compounds, difference plot {.tabset } 
+
+### PCBs
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
+
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Chlorobiphenyls") %>% # View()
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  mutate(
+    trend_mean_dw_ww = (linear_trend_dw + linear_trend_ww)/2,
+    trend_dw_minus_ww = linear_trend_dw - linear_trend_ww,
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(trend_mean_dw_ww, trend_dw_minus_ww, text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`)) +
+  scale_color_manual(values = p_colors) +
+  geom_hline(yintercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand))
+ 
+gg 
+
+
+```
+
+### PCBs (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + geom_smooth(method = "lm", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+### Metals
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
+
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Metals") %>% # View()
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  mutate(
+    trend_mean_dw_ww = (linear_trend_dw + linear_trend_ww)/2,
+    trend_dw_minus_ww = linear_trend_dw - linear_trend_ww,
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(trend_mean_dw_ww, trend_dw_minus_ww, text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`)) +
+  scale_color_manual(values = p_colors) +
+  geom_hline(yintercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand))
+ 
+gg + geom_smooth(method = "lm", color = "red", size = 1)
+
+
+```
+
+
+### Metals (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + geom_smooth(method = "lm", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+
+## PCBs by country  {.tabset}
+
+### UK 
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
+
+sel_country <- "United Kingdom"
+
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Chlorobiphenyls") %>%
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  filter(country %in% sel_country) %>%
+  mutate(
+    trend_mean_dw_ww = (linear_trend_dw + linear_trend_ww)/2,
+    trend_dw_minus_ww = linear_trend_dw - linear_trend_ww,
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(linear_trend_ww, linear_trend_dw, 
+             text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`), size = 1) +
+  scale_color_manual(values = p_colors) +
+  geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand)) +
+  labs(title = sel_country)
+
+gg + geom_smooth(method = "deming", color = "red", size = 1)
+
+```
+
+### UK (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + geom_smooth(method = "deming", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+### Ireland 
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
+
+sel_country <- "Ireland"
+
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Chlorobiphenyls") %>%
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  filter(country %in% sel_country) %>%
+  mutate(
+    trend_mean_dw_ww = (linear_trend_dw + linear_trend_ww)/2,
+    trend_dw_minus_ww = linear_trend_dw - linear_trend_ww,
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(linear_trend_ww, linear_trend_dw, 
+             text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`), size = 1) +
+  scale_color_manual(values = p_colors) +
+  geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand)) +
+  labs(title = sel_country)
+ 
+gg + geom_smooth(method = "deming", color = "red", size = 1)
+
+```
+
+
+### IE (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + geom_smooth(method = "deming", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+
+### France 
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
+
+sel_country <- "France"
+
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Chlorobiphenyls") %>%
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  filter(country %in% sel_country) %>%
+    mutate(
+    trend_mean_dw_ww = (linear_trend_dw + linear_trend_ww)/2,
+    trend_dw_minus_ww = linear_trend_dw - linear_trend_ww,
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(linear_trend_ww, linear_trend_dw, 
+             text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`), size = 1) +
+  scale_color_manual(values = p_colors) +
+  geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand)) +
+  labs(title = sel_country)
+
+gg + geom_smooth(method = "deming", color = "red", size = 1)
+
+
+```
+
+### FR (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + geom_smooth(method = "deming", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+
+### Spain 
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
+
+sel_country <- "Spain"
+
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Chlorobiphenyls") %>%
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  filter(country %in% sel_country) %>%
+  mutate(
+    trend_mean_dw_ww = (linear_trend_dw + linear_trend_ww)/2,
+    trend_dw_minus_ww = linear_trend_dw - linear_trend_ww,
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(linear_trend_ww, linear_trend_dw, 
+             text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`), size = 1) +
+  scale_color_manual(values = p_colors) +
+  geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand)) +
+  labs(title = sel_country)
+
+gg + geom_smooth(method = "deming", color = "red", size = 1)
+ 
+```
+
+
+### ES (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + geom_smooth(method = "deming", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+
+### Iceland 
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
+
+sel_country <- "Iceland"
+
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Chlorobiphenyls") %>%
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  filter(country %in% sel_country) %>%
+  mutate(
+    trend_mean_dw_ww = (linear_trend_dw + linear_trend_ww)/2,
+    trend_dw_minus_ww = linear_trend_dw - linear_trend_ww,
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(linear_trend_ww, linear_trend_dw, 
+             text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`), size = 1) +
+  scale_color_manual(values = p_colors) +
+  geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand)) +
+  labs(title = sel_country)
+
+gg + geom_smooth(method = "deming", color = "red", size = 1)
+
+```
+
+
+### IS (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + geom_smooth(method = "deming", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+
+
+### Norway 
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
+
+sel_country <- "Norway"
+
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Chlorobiphenyls") %>%
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  filter(country %in% sel_country) %>%
+  mutate(
+    trend_mean_dw_ww = (linear_trend_dw + linear_trend_ww)/2,
+    trend_dw_minus_ww = linear_trend_dw - linear_trend_ww,
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(linear_trend_ww, linear_trend_dw, 
+             text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`), size = 1) +
+  scale_color_manual(values = p_colors) +
+  geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand)) +
+  labs(title = sel_country)
+
+gg + geom_smooth(method = "deming", color = "red", size = 1)
+
+```
+
+
+### NO (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + geom_smooth(method = "deming", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+
+
+## Metals by country  {.tabset}
+
+### UK 
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
+
+sel_country <- "United Kingdom"
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Metals") %>%
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  filter(country %in% sel_country) %>%
+  mutate(
+    trend_mean_dw_ww = (linear_trend_dw + linear_trend_ww)/2,
+    trend_dw_minus_ww = linear_trend_dw - linear_trend_ww,
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(linear_trend_ww, linear_trend_dw, 
+             text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`), size = 1) +
+  scale_color_manual(values = p_colors) +
+  geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand)) +
+  labs(title = sel_country)
+
+gg + geom_smooth(method = "deming", color = "red", size = 1)
+
+```
+
+
+### UK (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + geom_smooth(method = "deming", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+
+### Ireland 
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
+
+sel_country <- "Ireland"
+
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Metals") %>%
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  filter(country %in% sel_country) %>%
+  mutate(
+    trend_mean_dw_ww = (linear_trend_dw + linear_trend_ww)/2,
+    trend_dw_minus_ww = linear_trend_dw - linear_trend_ww,
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(linear_trend_ww, linear_trend_dw, 
+             text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`), size = 1) +
+  scale_color_manual(values = p_colors) +
+  geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand)) +
+  labs(title = sel_country)
+
+gg + geom_smooth(method = "deming", color = "red", size = 1)
+
+```
+
+### IE (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + geom_smooth(method = "deming", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+
+### France 
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
+
+sel_country <- "France"
+
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Metals") %>%
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  filter(country %in% sel_country) %>%
+  mutate(
+    trend_mean_dw_ww = (linear_trend_dw + linear_trend_ww)/2,
+    trend_dw_minus_ww = linear_trend_dw - linear_trend_ww,
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(linear_trend_ww, linear_trend_dw, 
+             text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`), size = 1) +
+  scale_color_manual(values = p_colors) +
+  geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand)) +
+  labs(title = sel_country)
+
+gg + geom_smooth(method = "deming", color = "red", size = 1)
+
+```
+
+### FR (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + geom_smooth(method = "deming", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+
+### Spain 
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
+
+sel_country <- "Spain"
+
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Metals") %>%
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  filter(country %in% sel_country) %>%
+  mutate(
+    trend_mean_dw_ww = (linear_trend_dw + linear_trend_ww)/2,
+    trend_dw_minus_ww = linear_trend_dw - linear_trend_ww,
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(linear_trend_ww, linear_trend_dw, 
+             text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`), size = 1) +
+  scale_color_manual(values = p_colors) +
+  geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand)) +
+  labs(title = sel_country)
+ 
+gg + geom_smooth(method = "deming", color = "red", size = 1)
+
+```
+
+
+### ES (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + geom_smooth(method = "deming", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+
+### Denmark 
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
+
+sel_country <- "Denmark"
+
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Metals") %>%
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  filter(country %in% sel_country) %>%
+  mutate(
+    trend_mean_dw_ww = (linear_trend_dw + linear_trend_ww)/2,
+    trend_dw_minus_ww = linear_trend_dw - linear_trend_ww,
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(linear_trend_ww, linear_trend_dw, 
+             text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`), size = 1) +
+  scale_color_manual(values = p_colors) +
+  geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand)) +
+  labs(title = sel_country)
+
+gg + geom_smooth(method = "deming", color = "red", size = 1)
+ 
+```
+
+### DK (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + geom_smooth(method = "deming", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+
+### Iceland 
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
+
+sel_country <- "Iceland"
+
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Metals") %>%
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  filter(country %in% sel_country) %>%
+  mutate(
+    trend_mean_dw_ww = (linear_trend_dw + linear_trend_ww)/2,
+    trend_dw_minus_ww = linear_trend_dw - linear_trend_ww,
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(linear_trend_ww, linear_trend_dw, 
+             text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`), size = 1) +
+  scale_color_manual(values = p_colors) +
+  geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand)) +
+  labs(title = sel_country)
+
+gg + geom_smooth(method = "deming", color = "red", size = 1)
+
+```
+
+### IS (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + 
+  geom_smooth(method = "lm", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+
+### Norway 
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
+
+sel_country <- "Norway"
+
+gg <- df %>%
+  filter(species == "Mytilus edulis" & 
+           determinand_group %in% "Metals") %>%
+  add_count(determinand) %>%
+  filter(n > 120) %>%
+  filter(country %in% sel_country) %>%
+  mutate(
+    trend_mean_dw_ww = (linear_trend_dw + linear_trend_ww)/2,
+    trend_dw_minus_ww = linear_trend_dw - linear_trend_ww,
+    `P < 0.05` = case_when(
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw <= 0.05 ~ "ww and dw", 
+      p_linear_trend_ww <= 0.05 & p_linear_trend_dw > 0.05 ~ "ww", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw <= 0.05 ~ "dw", 
+      p_linear_trend_ww > 0.05 & p_linear_trend_dw > 0.05 ~ "none"),
+    `P < 0.05` = factor(`P < 0.05`, levels = p_levels)
+  ) %>%
+  ggplot(aes(linear_trend_ww, linear_trend_dw, 
+             text = paste(country, station_code, station_name))) +
+  geom_point(aes(color = `P < 0.05`), size = 1) +
+  scale_color_manual(values = p_colors) +
+  geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
+  facet_wrap(vars(determinand)) +
+  labs(title = sel_country)
+
+gg + geom_smooth(method = "deming", color = "red", size = 1)
+
+```
+
+### NO (interactive)
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+gg2 <- gg + geom_smooth(method = "deming", color = "red", se = FALSE)
+
+ggplotly(gg2)
+
+```
+
+
+
+
+
+
+

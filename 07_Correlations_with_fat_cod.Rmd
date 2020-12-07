@@ -1,0 +1,567 @@
+---
+title: "Correlations between fat and organics - Norwegian cod"
+author: "DHJ"
+date: "25 11 2020"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+
+```{r, echo=FALSE, results='hide', warning=FALSE, message=FALSE}
+
+library(dplyr)
+library(ggplot2)
+# library(plotly)
+library(mgcv)
+library(purrr)
+library(visreg)
+
+```
+
+
+```{r, echo = FALSE}
+
+#
+# Data (Norwegian CEMP data on sample level)
+#
+
+df <- readRDS("../Milkys2_pc/Files_from_Jupyterhub_2019/Raw_data/109_adjusted_data_2020-08-05.rds")
+
+# df %>%
+#   filter(LATIN_NAME %in% "Gadus morhua" & TISSUE_NAME %in% "Lever") %>%
+#   group_by(PARAM, STATION_CODE) %>%
+#   summarise(n_year = length(unique(MYEAR)), over_loq = mean(is.na(FLAG1))) %>%
+#   filter(n_year > 10 & over_loq > 0.7) %>% pull(PARAM) %>% unique() %>% dput()
+
+
+```
+
+```{r, echo = FALSE}
+
+param <- "BDE49"
+station <- "30B"
+
+```
+
+
+## Example: one substance (`r param`), one station (`r station`)    
+  
+Model: `ln(concentration) = a*ln(fat) + b*Length + spline(Year)`  
+
+Thus:  
+
+* The effect of ln(fat) assumed to be linear   
+* Effect of year (non-linear effect) and length (linear) also taken into account   
+```{r, echo = FALSE}
+
+# param <- "CB_S7"
+
+
+#
+# Test 1 (result not shown): one substance, all stations    
+#
+df2 <- df %>%
+  filter(LATIN_NAME %in% "Gadus morhua" & PARAM %in% param & TISSUE_NAME %in% "Lever" & !is.na(FAT_PERC))
+
+# Don't show these results  
+if (FALSE){
+  summary(m1)
+  par(mfrow = c(2,2), mar = c(4,5,2,1), oma = c(0,0,2,0))
+  visreg(m1)
+  mtext(param, outer = TRUE, line = 0.5)
+}
+
+
+#
+# Test 2 (shown): one substance + one station
+#
+
+df3_check <- df2 %>%
+  filter(STATION_CODE == station)
+
+# All stations    
+m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC) + LNMEA, data = df3_check)
+summary(m1)
+
+par(mfrow = c(2,2), mar = c(4,5,2,1), oma = c(0,0,2,0))
+visreg(m1)
+mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+
+# summary(m1) %>% str()
+# summary(m1)$p.table[2,]
+
+```
+
+
+### Several substances + stations          
+```{r, echo = FALSE}
+
+#
+# Test with one substance + one station
+#
+
+# Test with one substance  
+
+get_estimates <- function(param, station, data){
+  
+  df2 <- data %>%
+    filter(LATIN_NAME %in% "Gadus morhua" & PARAM %in% param & 
+             TISSUE_NAME %in% "Lever" & 
+             STATION_CODE == station & 
+             !is.na(FAT_PERC) & !is.na(LNMEA))
+  
+  m0 <- gam(log(VALUE_WW) ~ 1, data = df2)
+  m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + LNMEA, data = df2)
+  m2 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC) + LNMEA, data = df2)
+  dev <- anova(m0, m1, m2)[,2]
+  
+  tibble(PARAM = param, 
+         STATION_CODE = station,
+         Fat_slope = summary(m2)$p.table[2,1],
+         Fat_slope_se = summary(m2)$p.table[2,2],
+         Fat_pvalue = summary(m2)$p.table[2,4],
+         Dev_expl_tot = (dev[1]-dev[3])/dev[1],
+         Dev_expl_fat = (dev[2]-dev[3])/dev[1]
+         )
+  
+}
+
+# Test
+# get_estimates("CB118", "30B", df)
+
+params_all <- c(
+  "BDE28", "BDE47", "BDE49", 
+  "BDE66", "BDE99", "BDE100", "BDE154", "BDESS", "BDE6S",
+  "CB28", "CB52", "CB101", "CB105", 
+  "CB118", "CB138", "CB153", "CB156", "CB180", "CB209", "CB_S7", 
+  "SCCP", "MCCP", "OCS", "HCB",  
+  "DDEPP", "DDTEP", "DDTPP", "TDEPP",    # expected to NOT correlate with fat
+  "PFAS", "PFOS", "PFOSA")               # same
+
+#
+# Series of PCBs and BDEs  
+#
+# Keep time series with at least 10 years and at least 70% data over LOQ
+#
+df_series <- df %>%
+  filter(LATIN_NAME %in% "Gadus morhua" & TISSUE_NAME %in% "Lever" & 
+           PARAM %in% params_all) %>%
+  group_by(PARAM, STATION_CODE) %>%
+  summarise(
+    n_year = length(unique(MYEAR)), 
+    over_loq = mean(is.na(FLAG1)),
+    .groups = "drop") %>%
+  filter(n_year > 10 & over_loq > 0.7)   # at least 10 years and at least 70% data over LOQ
+
+#
+# Run analysis for each time series
+#
+df_effect <- 1:nrow(df_series) %>% 
+  purrr::map_dfr(
+    ~get_estimates(param = df_series$PARAM[.], station = df_series$STATION_CODE[.], df)
+  )
+
+df_effect <- df_effect %>%
+  mutate(Fat_effect = ifelse(Fat_pvalue < 0.05, "P < 0.05",  "P >= 0.05"))
+
+```
+
+
+## Effect of fat, slope {.tabset}  
+
+Effect of ln(fat) on ln(concentration)   
+
+* Analysis on station-by-station basis   
+* The effect of ln(fat) assumed to be linear   
+* Effect of year (non-linear effct) and length (linear) also taken into account   
+* Analysis done for time series with at least 10 years and at least 70% data over LOQ    
+  
+### PCBs
+```{r, echo=FALSE, fig.width=9, fig.height=6}
+
+params <- c(
+  "CB28", "CB52", "CB101", "CB105", 
+  "CB118", "CB138", "CB153", "CB156", "CB180", "CB209", "CB_S7")
+
+df_effect %>%
+  filter(PARAM %in% params) %>%
+  mutate(PARAM = factor(PARAM, levels = params)) %>%
+  ggplot(aes(x = STATION_CODE, y = Fat_slope)) +
+  geom_pointrange(
+    aes(ymin = Fat_slope - 2*Fat_slope_se, ymax = Fat_slope + 2*Fat_slope_se, color = Fat_effect)) +
+  scale_color_manual(values = c("red3", "grey40")) +
+  geom_hline(yintercept = 0) +
+  facet_wrap(vars(PARAM)) +
+  theme(axis.text.x = element_text(angle = -45, hjust = 0))
+
+```
+
+
+### BDEs
+```{r, echo=FALSE, fig.width=9, fig.height=6}
+
+params <- c(
+  "BDE28", "BDE47", "BDE49", 
+  "BDE66", "BDE99", "BDE100", "BDE154", "BDESS", "BDE6S")
+
+
+df_effect %>%
+  filter(PARAM %in% params) %>%
+  mutate(PARAM = factor(PARAM, levels = params)) %>%
+  ggplot(aes(x = STATION_CODE, y = Fat_slope)) +
+  geom_pointrange(
+    aes(ymin = Fat_slope - 2*Fat_slope_se, ymax = Fat_slope + 2*Fat_slope_se, color = Fat_effect)) +
+  scale_color_manual(values = c("red3", "grey40")) +
+  geom_hline(yintercept = 0) +
+  facet_wrap(vars(PARAM)) +
+  theme(axis.text.x = element_text(angle = -45, hjust = 0))
+
+```
+
+
+
+### Organochorines, paraffins
+```{r, echo=FALSE, fig.width=6, fig.height=4}
+
+params <- c("OCS", "HCB", "SCCP", "MCCP" )
+
+df_effect %>%
+  filter(PARAM %in% params) %>%
+  mutate(PARAM = factor(PARAM, levels = params)) %>%
+  ggplot(aes(x = STATION_CODE, y = Fat_slope)) +
+  geom_pointrange(
+    aes(ymin = Fat_slope - 2*Fat_slope_se, ymax = Fat_slope + 2*Fat_slope_se, color = Fat_effect)) +
+  scale_color_manual(values = c("red3", "grey40")) +
+  geom_hline(yintercept = 0) +
+  facet_wrap(vars(PARAM)) +
+  theme(axis.text.x = element_text(angle = -45, hjust = 0))
+
+```
+
+
+### Tinorganics and PFAS
+```{r, echo=FALSE, fig.width=9, fig.height=6}
+
+params <-  c("PFAS", "PFOS", "PFOSA",
+             "DDEPP", "DDTEP", "DDTPP", "TDEPP")    # expected to NOT correlate with fat
+             
+df_effect %>%
+  filter(PARAM %in% params) %>%
+  mutate(PARAM = factor(PARAM, levels = params)) %>%
+  ggplot(aes(x = STATION_CODE, y = Fat_slope)) +
+  geom_pointrange(
+    aes(ymin = Fat_slope - 2*Fat_slope_se, ymax = Fat_slope + 2*Fat_slope_se, color = Fat_effect)) +
+  scale_color_manual(values = c("red3", "grey40")) +
+  geom_hline(yintercept = 0) +
+  facet_wrap(vars(PARAM)) +
+  theme(axis.text.x = element_text(angle = -45, hjust = 0))
+
+```
+
+  
+## Effect of fat, explained variance {.tabset}  
+  
+### PCBs
+```{r, echo=FALSE, fig.width=9, fig.height=6}
+
+params <- c(
+  "CB28", "CB52", "CB101", "CB105", 
+  "CB118", "CB138", "CB153", "CB156", "CB180", "CB209", "CB_S7")
+
+df_effect %>%
+  filter(PARAM %in% params) %>%
+  mutate(PARAM = factor(PARAM, levels = params)) %>%
+  ggplot(aes(x = STATION_CODE)) +
+  geom_point(
+    aes(y = Dev_expl_fat, color = Fat_effect)) +
+  scale_color_manual(values = c("red3", "grey40")) +
+  geom_hline(yintercept = 0) +
+  facet_wrap(vars(PARAM)) +
+  theme(axis.text.x = element_text(angle = -45, hjust = 0)) +
+  labs(y = "Deviance explained by fat (prop.)")
+
+```
+
+### BDEss
+```{r, echo=FALSE, fig.width=9, fig.height=6}
+
+params <- c(
+  "BDE28", "BDE47", "BDE49", 
+  "BDE66", "BDE99", "BDE100", "BDE154", "BDESS", "BDE6S")
+
+df_effect %>%
+  filter(PARAM %in% params) %>%
+  mutate(PARAM = factor(PARAM, levels = params)) %>%
+  ggplot(aes(x = STATION_CODE)) +
+  geom_point(
+    aes(y = Dev_expl_fat, color = Fat_effect)) +
+  scale_color_manual(values = c("red3", "grey40")) +
+  geom_hline(yintercept = 0) +
+  facet_wrap(vars(PARAM)) +
+  theme(axis.text.x = element_text(angle = -45, hjust = 0)) +
+  labs(y = "Deviance explained by fat (prop.)")
+
+```
+
+
+### Organochorines, paraffins
+```{r, echo=FALSE, fig.width=6, fig.height=4}
+
+params <- c("OCS", "HCB", "SCCP", "MCCP" )
+
+df_effect %>%
+  filter(PARAM %in% params) %>%
+  mutate(PARAM = factor(PARAM, levels = params)) %>%
+  ggplot(aes(x = STATION_CODE)) +
+  geom_point(
+    aes(y = Dev_expl_fat, color = Fat_effect)) +
+  scale_color_manual(values = c("red3", "grey40")) +
+  geom_hline(yintercept = 0) +
+  facet_wrap(vars(PARAM)) +
+  theme(axis.text.x = element_text(angle = -45, hjust = 0)) +
+  labs(y = "Deviance explained by fat (prop.)")
+
+```
+
+
+### Tinorganics and PFAS
+```{r, echo=FALSE, fig.width=9, fig.height=6}
+
+params <-  c("PFAS", "PFOS", "PFOSA",
+             "DDEPP", "DDTEP", "DDTPP", "TDEPP")    # expected to NOT correlate with fat
+df_effect %>%
+  filter(PARAM %in% params) %>%
+  mutate(PARAM = factor(PARAM, levels = params)) %>%
+  ggplot(aes(x = STATION_CODE)) +
+  geom_point(
+    aes(y = Dev_expl_fat, color = Fat_effect)) +
+  scale_color_manual(values = c("red3", "grey40")) +
+  geom_hline(yintercept = 0) +
+  facet_wrap(vars(PARAM)) +
+  theme(axis.text.x = element_text(angle = -45, hjust = 0)) +
+  labs(y = "Deviance explained by fat (prop.)")
+
+```
+
+## Some more examples  
+
+```{r, echo = FALSE}
+
+get_data <- function(param, station, data){
+  
+  data %>%
+    filter(LATIN_NAME %in% "Gadus morhua" & PARAM %in% param & 
+             TISSUE_NAME %in% "Lever" & 
+             STATION_CODE == station & 
+             !is.na(FAT_PERC) & !is.na(LNMEA))
+  
+  }
+
+```
+
+
+
+```{r, echo = FALSE}
+param <- "CB52"
+station <- "36B"
+```
+
+### `r param` at station `r station`      
+```{r, echo = FALSE, fig.width=9, fig.height=3}
+
+df2 <- get_data(param, station, df)
+m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC) + LNMEA, data = df2)
+
+par(mfrow = c(1,3), mar = c(4,5,2,1), oma = c(0,0,2,0))
+visreg(m1)
+mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+
+```
+
+
+
+```{r, echo = FALSE}
+param <- "CB118"
+station <- "36B"
+```
+
+### `r param` at station `r station`      
+```{r, echo = FALSE, fig.width=9, fig.height=3}
+
+df2 <- get_data(param, station, df)
+m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC) + LNMEA, data = df2)
+
+par(mfrow = c(1,3), mar = c(4,5,2,1), oma = c(0,0,2,0))
+visreg(m1)
+mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+
+```
+
+
+```{r, echo = FALSE}
+param <- "CB_S7"
+station <- "36B"
+```
+
+### `r param` at station `r station`      
+```{r, echo = FALSE, fig.width=9, fig.height=3}
+
+df2 <- get_data(param, station, df)
+m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC) + LNMEA, data = df2)
+
+par(mfrow = c(1,3), mar = c(4,5,2,1), oma = c(0,0,2,0))
+visreg(m1)
+mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+
+```
+
+
+```{r, echo = FALSE}
+param <- "BDE49"
+station <- "30B"
+```
+
+### `r param` at station `r station`      
+```{r, echo = FALSE, fig.width=9, fig.height=3}
+
+df2 <- get_data(param, station, df)
+m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC) + LNMEA, data = df2)
+
+par(mfrow = c(1,3), mar = c(4,5,2,1), oma = c(0,0,2,0))
+visreg(m1)
+mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+
+```
+
+
+```{r, echo = FALSE}
+param <- "BDE99"
+station <- "30B"
+```
+
+### `r param` at station `r station`      
+```{r, echo = FALSE, fig.width=9, fig.height=3}
+
+df2 <- get_data(param, station, df)
+m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC) + LNMEA, data = df2)
+
+par(mfrow = c(1,3), mar = c(4,5,2,1), oma = c(0,0,2,0))
+visreg(m1)
+mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+
+```
+
+
+```{r, echo = FALSE}
+param <- "BDE6S"
+station <- "30B"
+```
+
+### `r param` at station `r station`      
+```{r, echo = FALSE, fig.width=9, fig.height=3}
+
+df2 <- get_data(param, station, df)
+m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC) + LNMEA, data = df2)
+
+par(mfrow = c(1,3), mar = c(4,5,2,1), oma = c(0,0,2,0))
+visreg(m1)
+mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+
+```
+
+
+```{r, echo = FALSE}
+param <- "OCS"
+station <- "30B"
+```
+
+### `r param` at station `r station`      
+```{r, echo = FALSE, fig.width=9, fig.height=3}
+
+df2 <- get_data(param, station, df)
+m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC) + LNMEA, data = df2)
+
+par(mfrow = c(1,3), mar = c(4,5,2,1), oma = c(0,0,2,0))
+visreg(m1)
+mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+
+```
+
+
+
+```{r, echo = FALSE}
+param <- "HCB"
+station <- "23B"
+```
+
+### `r param` at station `r station`      
+```{r, echo = FALSE, fig.width=9, fig.height=3}
+
+df2 <- get_data(param, station, df)
+m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC) + LNMEA, data = df2)
+
+par(mfrow = c(1,3), mar = c(4,5,2,1), oma = c(0,0,2,0))
+visreg(m1)
+mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+
+```
+
+
+
+```{r, echo = FALSE}
+param <- "SCCP"
+station <- "23B"
+```
+
+### `r param` at station `r station`      
+```{r, echo = FALSE, fig.width=9, fig.height=3}
+
+df2 <- get_data(param, station, df)
+m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC) + LNMEA, data = df2)
+
+par(mfrow = c(1,3), mar = c(4,5,2,1), oma = c(0,0,2,0))
+visreg(m1)
+mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+
+```
+
+
+
+```{r, echo = FALSE}
+param <- "PFOS"
+station <- "30B"
+```
+
+### `r param` at station `r station`      
+```{r, echo = FALSE, fig.width=9, fig.height=3}
+
+df2 <- get_data(param, station, df)
+m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC) + LNMEA, data = df2)
+
+par(mfrow = c(1,3), mar = c(4,5,2,1), oma = c(0,0,2,0))
+visreg(m1)
+mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+
+```
+
+
+
+```{r, echo = FALSE}
+param <- "DDEPP"
+station <- "30B"
+```
+
+### `r param` at station `r station`      
+```{r, echo = FALSE, fig.width=9, fig.height=3}
+
+df2 <- get_data(param, station, df)
+m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC) + LNMEA, data = df2)
+
+par(mfrow = c(1,3), mar = c(4,5,2,1), oma = c(0,0,2,0))
+visreg(m1)
+mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+
+```
+

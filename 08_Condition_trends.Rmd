@@ -1,0 +1,391 @@
+---
+title: "Trends in ww/dw concentration vs. trends in Fulton's condition index"
+author: "DHJ"
+date: "25 11 2020"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+
+```{r, echo=FALSE, results='hide', warning=FALSE, message=FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(mgcv)
+library(purrr)
+library(visreg)
+library(readxl)
+
+```
+
+
+
+### Number of time series
+```{r, echo=FALSE}
+
+df <- read_excel("Input_data/Longform assessment condition.xlsx", 
+                 sheet = "DK SP NL", range = "A1:Z7862") %>%
+  mutate(
+    Conc_ww = case_when(
+      Param_basis %in% "D" ~ `Param Conc`*DRYWT/100,
+      Param_basis %in% "W" ~ `Param Conc`),
+    Conc_dw = case_when(
+      Param_basis %in% "D" ~ `Param Conc`,
+      Param_basis %in% "W" ~ `Param Conc`/(DRYWT/100)),
+    Parameter = factor(Parameter, 
+                       levels = c("CD", "PB", "HG", "CB118", "CB153", "PA", "PYR"))
+  )
+  
+# BOCHTVWTM
+
+df %>%
+  distinct(country, Parameter, station_name) %>%
+  xtabs(~ country + Parameter, .)
+
+```
+
+
+```{r, fig.width=7, fig.height=9, echo=FALSE, results='hide'}
+
+#
+# Fixing some data - since we have no units
+#
+
+#
+# Check
+#
+
+if (FALSE){
+df %>%
+  ggplot(aes(Conc_ww)) +
+  geom_histogram(binwidth = 250) +
+  facet_grid(col = vars(country), row = vars(Parameter))
+}
+
+
+### Histogram of ww values, PB in Spain  
+# ```{r, fig.width=7, fig.height=5, echo=FALSE, results='hide'}
+
+if (FALSE){
+  
+df %>%
+  filter(Parameter == "PB" & country == "Spain") %>%
+  ggplot(aes(Conc_ww)) +
+  geom_histogram(binwidth = 100) +
+  labs(title = "Original data")
+
+df %>%
+  filter(Parameter == "PB" & country == "Spain") %>%
+  ggplot(aes(Conc_ww)) +
+  geom_histogram() +
+  scale_x_log10() +
+  labs(title = "Original data, log scale")
+
+}
+
+#
+# Put some Spanish data on same scale
+#
+df2 <- df %>%
+  mutate(
+    Conc_ww = case_when(
+      Parameter == "PB" & country == "Spain" & Conc_ww > 1600 ~ Conc_ww/1000,
+      TRUE ~ Conc_ww)
+  )
+
+
+#
+# New histogram
+#
+if (FALSE){
+
+  df2 %>%
+  filter(Parameter == "PB" & country == "Spain") %>%
+  ggplot(aes(Conc_ww)) +
+  geom_histogram(binwidth = 100) +
+  labs(title = "Fixed data")
+
+}
+
+
+```
+
+
+
+## Example  
+
+```{r, echo=FALSE}
+station <- "BOCHTVWTM"
+param <- "CD"
+```
+  
+
+### `r param` at station `r station`  
+```{r, echo = FALSE, warning=FALSE, fig.width = 5, fig.height=3}
+
+
+df2 %>%
+  filter(station_name == station & Parameter %in% param) %>%
+  ggplot(aes(year, DRYWT)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = 'y ~ x') +
+  labs(title = paste0(param, " at ", station, ", dry wt by year"))
+
+df2 %>%
+  filter(station_name == station & Parameter %in% param) %>% 
+  ggplot(aes(year, Fultons)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = 'y ~ x') +
+  labs(title = paste0(param, " at ", station, ", Fultons by year"))
+
+df2 %>%
+  filter(station_name == station & Parameter %in% param) %>%
+  ggplot(aes(year, Conc_ww)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = 'y ~ x') +
+  labs(title = paste0(param, " at ", station, ", w.w. concentration by year"))
+
+
+```
+
+
+## Analyse trends        
+
+```{r, echo = FALSE, warning=FALSE}
+
+get_regressions <- function(param, station, data){
+  
+  # cat(param, station, "\n")
+  df_select <- data %>%
+    filter(station_name == station & Parameter %in% param & !is.na(Fultons) & !is.na(Conc_dw))
+  
+  modsumm1 <- summary(lm(Fultons ~ year, df_select))
+  modsumm2 <- summary(lm(Conc_ww ~ year, df_select))
+  modsumm3 <- summary(lm(Conc_dw ~ year, df_select))
+  
+  tibble(
+    Parameter = param,
+    station_name = station,
+    country = df_select$country[1],
+    fulton_slope = modsumm1$coef[2,1],
+    fulton_se = modsumm1$coef[2,2],
+    fulton_pval = modsumm1$coef[2,4],
+    conc_ww_slope = modsumm2$coef[2,1],
+    conc_ww_se = modsumm2$coef[2,2],
+    conc_ww_pval = modsumm2$coef[2,4],
+    conc_dw_slope = modsumm3$coef[2,1],
+    conc_dw_se = modsumm3$coef[2,2],
+    conc_dw_pval = modsumm3$coef[2,4]
+  )
+  
+  
+  
+}
+
+# Test
+# get_regressions("CD", "BOCHTVWTM", df2)
+ 
+```
+
+```{r, echo = FALSE, warning = FALSE}
+
+df_series <- df2 %>%
+  filter(!is.na(Fultons) & !is.na(`Param Conc`)) %>%
+  group_by(Parameter, station_name) %>%
+  summarise(
+    n_year = length(unique(year)), 
+    .groups = "drop") %>%
+  filter(n_year >= 5)   # at least 10 years and at least 70% data over LOQ
+
+# xtabs(~station_name + Parameter, df_series)
+
+df_slopes <- 1:nrow(df_series) %>%
+  map_dfr(~get_regressions(df_series$Parameter[.],
+                           df_series$station_name[.],
+                           df2))
+
+
+```
+
+### W.w. conc. trend vs. Fulton trend  
+```{r, echo = FALSE, fig.width = 8, fig.height=6, warning=FALSE}
+
+gg <- ggplot(df_slopes, aes(fulton_slope, conc_ww_slope, 
+                            color = country, text = station_name)) +
+  geom_point(size = 1) +
+  facet_wrap(vars(Parameter), scales = "free_y")
+
+ggplotly(gg)
+
+```
+
+### Ww trend minus dw trend, vs. Fulton trend  
+```{r, echo = FALSE, fig.width = 8, fig.height=6, warning=FALSE}
+
+gg <- df_slopes %>%
+  mutate(ww_minus_dw_slope = conc_ww_slope - conc_dw_slope) %>%
+  ggplot(aes(fulton_slope, ww_minus_dw_slope, 
+             color = country, text = station_name)) +
+  geom_point(size = 1) +
+  facet_wrap(vars(Parameter), scales = "free_y")
+
+ggplotly(gg)
+
+```
+
+
+### Ratio of Ww trend / dw trend, vs. Fulton trend  
+```{r, echo = FALSE, fig.width = 8, fig.height=6}
+
+gg <- df_slopes %>%
+  mutate(ww_dw_slope_ratio = conc_ww_slope/conc_dw_slope) %>%
+  ggplot(aes(fulton_slope, ww_dw_slope_ratio, 
+             color = country, text = station_name)) +
+  geom_point(size = 1) +
+  facet_wrap(vars(Parameter), scales = "free_y")
+
+ggplotly(gg)
+
+```
+
+
+
+## More examples   
+
+  
+
+### Negative trend in both w.w. concentration and Fulton's index  
+
+```{r, echo = FALSE}
+param <- "CD"
+station <- "MGACED"
+```
+
+`r param` at station `r station`  
+
+```{r, echo = FALSE, warning=FALSE, fig.width = 5, fig.height=3}
+
+df2_sel <- df2 %>%
+  filter(station_name == station & Parameter %in% param)
+
+ggplot(df2_sel, aes(year, DRYWT)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = 'y ~ x') +
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), dry wt"))
+
+ggplot(df2_sel, aes(year, Fultons)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = 'y ~ x') +
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), Fulton"))
+
+ggplot(df2_sel, aes(year, `Param Conc`)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = 'y ~ x') +
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), w.w. concentration"))
+
+
+```
+
+
+### Negative trend in Fulton's index, no trend in w.w. concentration
+
+```{r, echo = FALSE}
+param <- "PB"
+station <- "BOCHTVWTM"
+```
+
+`r param` at station `r station`  
+
+```{r, echo = FALSE, warning=FALSE, fig.width = 5, fig.height=3}
+
+df2_sel <- df2 %>%
+  filter(station_name == station & Parameter %in% param)
+
+ggplot(df2_sel, aes(year, DRYWT)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = 'y ~ x') +
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), dry wt"))
+
+ggplot(df2_sel, aes(year, Fultons)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = 'y ~ x') +
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), Fulton"))
+
+ggplot(df2_sel, aes(year, `Param Conc`)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = 'y ~ x') +
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), w.w. concentration"))
+
+
+```
+
+
+
+
+### Negative trend in Fulton's index, positive trend in w.w. concentration
+
+```{r, echo = FALSE}
+param <- "CD"
+station <- "NJY MSS11"
+```
+
+`r param` at station `r station`  
+
+```{r, echo = FALSE, warning=FALSE, fig.width = 5, fig.height=3}
+
+df2_sel <- df2 %>%
+  filter(station_name == station & Parameter %in% param)
+
+ggplot(df2_sel, aes(year, DRYWT)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = 'y ~ x') +
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), dry wt"))
+
+ggplot(df2_sel, aes(year, Fultons)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = 'y ~ x') +
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), Fulton"))
+
+ggplot(df2_sel, aes(year, `Param Conc`)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = 'y ~ x') +
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), w.w. concentration"))
+
+
+```
+
+### Positive trend in Fulton's index, negative trend in w.w. concentration
+
+```{r, echo = FALSE}
+param <- "PB"
+station <- "MGAPIN"
+```
+
+`r param` at station `r station`  
+
+```{r, echo = FALSE, warning=FALSE, fig.width = 5, fig.height=3}
+
+df2_sel <- df2 %>%
+  filter(station_name == station & Parameter %in% param)
+
+ggplot(df2_sel, aes(year, DRYWT)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = 'y ~ x') +
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), dry wt"))
+
+ggplot(df2_sel, aes(year, Fultons)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = 'y ~ x') +
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), Fulton"))
+
+ggplot(df2_sel, aes(year, `Param Conc`)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = 'y ~ x') +
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), w.w. concentration"))
+
+
+```
+
