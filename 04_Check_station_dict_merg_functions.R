@@ -99,5 +99,67 @@ no_of_years <- function(mergedstation){
     data.frame(Station_name = mergedstation, 
                N_years = length(unique(tb$MYEAR)),
                stringsAsFactors = FALSE)
-  }
+}
+
+
+
+#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o
+#
+# Get official station names (per 2019)
+# 
+# From "06a. List of station names" in "Milkys/13_Make_big_excel_file.R"
+#
+#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o#o
+
+get_station_names <- function(){
+  data_stations <- readxl::read_excel("C:/Data/Seksjon 212/Milkys/Input_data/Kartbase.xlsx",
+                                      range = "AM1:AP72")
   
+  # Note that 
+  #     the current station code is 'stasjonskode', not "STATION_CODE"
+  #     `catch LAT__1` and `catch LONG__1` are currect (planned?) positions
+  #     the current station name is 'stasjonsnavn', not "STATION_CODE"
+  #     but station name for report is `Til Rapport`
+  #         station name for maps are `Til Kart`
+  
+  # Check the two station code columns
+  # data_stations %>%
+  #   filter(STATION_CODE != stasjonskode)    # zero rows
+  
+  data_stations <- data_stations %>%
+    rename(STATION_CODE = stasjonskode,
+           Lat = `catch LAT`, Long = `catch LONG`, 
+           STATION_NAME = stasjonsnavn) %>%
+    filter(!is.na(STATION_CODE))
+  
+  # One duplicate (different names), we just remove one of them
+  data_stations <- data_stations %>%
+    filter(!STATION_NAME %in% "Risøy, Østerfjord")
+  
+  data_stations <- data_stations %>%
+    rename(Station_name = STATION_NAME)
+  
+  data_stations
+}
+
+# Test
+# debugonce(get_station_names)
+# get_station_names() %>% head()
+
+leaflet_stationdict <- function(search_string, station_dict = dat_stdict, ...){
+  library(leaflet)
+  sel <- grepl(search_string, station_dict$Station_Name, ...) &
+    station_dict$Country %in% "Norway"
+  if (sum(sel) > 0){
+    df <- station_dict[sel,]
+    df$Popup = paste0("<b>", df$Station_Name, "</b><br>", df$StartYear, "-", df$EndYear)
+    # Leaflet map
+    leaflet() %>%
+      addTiles() %>%
+      addMarkers(lng = df$Lon, lat = df$Lat, popup = df$Popup) 
+  } else {
+    cat("No stations found\n")
+  }
+}
+
+# leaflet_stationdict("30B")

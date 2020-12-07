@@ -271,7 +271,7 @@ df_mergedstations %>%
 Used below to make a bunch of these    
 ```{r , fig.width = 7, fig.height = 8}
 
-check_data_shortcode("30B")
+check_data_shortcode("36A")
 
 ```
 
@@ -344,12 +344,14 @@ TO CHANGE?
 ```{r}
 
 st_short <- "45B"
+st_short <- "92A"
 
 # Note:
 # 43B2 (Tromsø) isn't in dat_merge (the excel file from Rob) because it is not goinbg to be merged with anything)
 # 45B2 (Hammerfest) - same
 
 sel <- grepl(st_short, dat_ices$StationName); sum(sel)
+
 dat_ices$StationName[sel] %>% unique()
 
 dat_ices[sel,] %>%
@@ -363,9 +365,34 @@ df <- dat_merge %>%
 
 # Leaflet map
 library(leaflet)
-leaflet() %>%
+map <- leaflet() %>%
   addTiles() %>%
   addMarkers(lng = df$Lon, lat = df$Lat, popup = df$Popup)
+map
+
+```
+
+### For making map for AMAP  
+In order to check whether these stations should be part of AMAP or not  
+```{r}
+sel <- grepl("92A1", dat_merge$Station_Name) |
+  grepl("92A2", dat_merge$Station_Name) |
+  grepl("94A ", dat_merge$Station_Name) |
+  grepl("I964", dat_merge$Station_Name) |
+  grepl("I965", dat_merge$Station_Name) |
+  grepl("I969", dat_merge$Station_Name); sum(sel)
+
+df <- dat_merge[sel,] %>%
+  mutate(Popup = paste(Station_Name, "<b>", StartYear, "-", EndYear))
+
+# Leaflet map
+library(leaflet)
+map <- leaflet() %>%
+  addTiles() %>%
+  addMarkers(lng = df$Lon, lat = df$Lat, popup = df$Popup)
+map
+
+htmlwidgets::saveWidget(map, file = "Leaflet_AMAP_question.html")
 
 
 ```
@@ -454,6 +481,10 @@ station <- "98F"
 station <- "43F1"
 station <- "45F"
 station <- c("227G1", "227G2")
+station <- c("43F", "43F1")
+station <- c("43B", "43B1")
+station <- c("45B1")
+station <- c("52S","56S","57S","63S","67S")
 nc <- nchar(station[1])
 
 folder_db <- "C:/Data/CEMP/2016_Milkys"
@@ -512,6 +543,11 @@ if (FALSE){
     count(myear)
 }
 
+# 43F = 1996 (Limanda), 43F1 = 2006-07 (Pleuronectes)
+# 43B = 1994-95-96 + 2006-07-08-09
+# 45B1 = 2006-07
+
+
 ```
 
 
@@ -554,7 +590,7 @@ df1 <- dat %>%
   arrange(MYEAR)
 
 # ICES data downloaded from ICES
-df2 <- dat_ices %>%
+df2 <- dat_merge %>%
   mutate(STATION_CODE = stringr::str_extract(StationName, "([^[[:blank:]]]+)")) %>%
   filter(grepl("^227G", STATION_CODE)) %>%
   count(STATION_CODE, MYEAR) %>%
@@ -600,7 +636,7 @@ dat %>%
 ```
 
 ## Checks for questions from Rob 12.1.2020  
-See "Data/Questions for Dag 20200112.docx"   
+See "Data/Questions for Dag 20200112.docx" (= mail from Rob 12. januar 2020)   
   
 ### Question 1   
 "According to the grouping file, the following stations are not replaced by anything (i.e. the identifiers in the Notes column appear only once).  I have assumed that I can ignore them from the point of view of establishing ‘replaced_by’ relations.  Please confirm."  
@@ -748,8 +784,55 @@ if (FALSE) {
 
 ```
 
+### Question 4  
+"The following ‘replacement’ groups have missing Station_DataType in the station dictionary, so I have assumed that they are consistent throughout."  Confirmed.
+
+
+### Question regarding long names  
+"First, it would be good to have a Station_LongName for all the most recent stations involved in replaced-by relation.  This is the name that will appear on the Contaminant App.  However, the information I currently have is confusing and I couldn’t work this out.  The file ‘Norway_LongName.xlsx’ has all the stations involved in the replaced-by relations, ordered by Notes and EndYear.  So the final station in each group is the most recent.  It also has four possible options for the Station_LongName in the columns Notes, Name1, Name2, Name3, which I have picked up from various entries in both the station dictionary and the file that Dag sent me.  Dag, please could you go through this and populate the LongName column, with the name that you would like to be used."  
+```{r}
+#
+# Data:
+#
+
+# Rob's file  
+df <- read_excel("Data/Norway_LongName.xlsx")
+# Official station names
+df_names <- get_station_names()
+
+
+#
+# Compare 1 and 2
+#
+sel12 <- with(df, !is.na(Name1) & !is.na(Name2) & Name1 != Name2 )
+sum(sel12) # 0
+
+#
+# Compare 2 and 3
+#
+sel23 <- with(df, !is.na(Name2) & !is.na(Name3) & Name2 != Name3 )
+sum(sel23) # 23
+
+# 
+df[sel23, c("Name2","Name3")]
+
+df_names %>%
+  filter(STATION_CODE %in% c("15A", "15G", "227G2", "22A", "30A"))
+
+```
 
 ```{r}
+
+# leaflet_stationdict("^25A")
+# leaflet_stationdict("^25G")
+# leaflet_stationdict("^26A")
+# leaflet_stationdict("^27A")
+# leaflet_stationdict("^27G")
+# leaflet_stationdict("^28A")
+# leaflet_stationdict("^35S")
+leaflet_stationdict("^41G")
+leaflet_stationdict("^42S")
+leaflet_stationdict("^46A")
 
 ```
 
