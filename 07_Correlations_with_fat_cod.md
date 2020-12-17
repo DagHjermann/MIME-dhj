@@ -82,7 +82,7 @@ Effect of ln(fat) on ln(concentration)
 ![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-8-1.png)<!-- -->
 
 
-### Tinorganics and PFAS
+### PFAS and DDTs
 ![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-9-1.png)<!-- -->
 
   
@@ -99,7 +99,7 @@ Effect of ln(fat) on ln(concentration)
 ![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-12-1.png)<!-- -->
 
 
-### Tinorganics and PFAS
+### PFAS and DDTs
 ![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-13-1.png)<!-- -->
 
 ## Some more examples  

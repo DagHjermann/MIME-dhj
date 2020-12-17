@@ -242,7 +242,7 @@ df_effect %>%
 ```
 
 
-### Tinorganics and PFAS
+### PFAS and DDTs
 ```{r, echo=FALSE, fig.width=9, fig.height=6}
 
 params <-  c("PFAS", "PFOS", "PFOSA",
@@ -327,7 +327,7 @@ df_effect %>%
 ```
 
 
-### Tinorganics and PFAS
+### PFAS and DDTs
 ```{r, echo=FALSE, fig.width=9, fig.height=6}
 
 params <-  c("PFAS", "PFOS", "PFOSA",
