@@ -55,6 +55,12 @@ Thus:
 
 * The effect of ln(fat) assumed to be linear   
 * Effect of year (non-linear effect) and length (linear) also taken into account   
+
+In the output and plot below,  
+* MYEAR = measurement year  
+* FAT_PERC = fat percentage in tissue    
+* LNMEA = length of fish in millimeters    
+
 ```{r, echo = FALSE}
 
 # param <- "CB_S7"
@@ -86,12 +92,19 @@ df3_check <- df2 %>%
 m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC) + LNMEA, data = df3_check)
 summary(m1)
 
-par(mfrow = c(2,2), mar = c(4,5,2,1), oma = c(0,0,2,0))
-visreg(m1)
-mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
-
 # summary(m1) %>% str()
 # summary(m1)$p.table[2,]
+
+```
+
+Plot of the model. The y axis is the expected w.w. concentration (given all aother variables are at mean value), and the x axes are    
+  
+
+```{r, echo = FALSE, fig.width=9, fig.height=3}
+
+par(mfrow = c(1,3), mar = c(4,5,2,1), oma = c(0,0,2,0))
+visreg(m1)
+mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
 
 ```
 
@@ -195,7 +208,9 @@ df_effect %>%
   scale_color_manual(values = c("red3", "grey40")) +
   geom_hline(yintercept = 0) +
   facet_wrap(vars(PARAM)) +
-  theme(axis.text.x = element_text(angle = -45, hjust = 0))
+  theme(axis.text.x = element_text(angle = -45, hjust = 0)) +
+  labs(y = "Effect of fat on ln w.w. concentration (slope)") 
+  
 
 ```
 
@@ -217,7 +232,8 @@ df_effect %>%
   scale_color_manual(values = c("red3", "grey40")) +
   geom_hline(yintercept = 0) +
   facet_wrap(vars(PARAM)) +
-  theme(axis.text.x = element_text(angle = -45, hjust = 0))
+  theme(axis.text.x = element_text(angle = -45, hjust = 0)) +
+  labs(y = "Effect of fat on ln w.w. concentration (slope)")
 
 ```
 
@@ -237,7 +253,8 @@ df_effect %>%
   scale_color_manual(values = c("red3", "grey40")) +
   geom_hline(yintercept = 0) +
   facet_wrap(vars(PARAM)) +
-  theme(axis.text.x = element_text(angle = -45, hjust = 0))
+  theme(axis.text.x = element_text(angle = -45, hjust = 0)) +
+  labs(y = "Effect of fat on ln w.w. concentration (slope)")
 
 ```
 
@@ -257,7 +274,8 @@ df_effect %>%
   scale_color_manual(values = c("red3", "grey40")) +
   geom_hline(yintercept = 0) +
   facet_wrap(vars(PARAM)) +
-  theme(axis.text.x = element_text(angle = -45, hjust = 0))
+  theme(axis.text.x = element_text(angle = -45, hjust = 0)) +
+  labs(y = "Effect of fat on ln w.w. concentration (slope)")
 
 ```
 
@@ -347,7 +365,12 @@ df_effect %>%
 ```
 
 ## Some more examples  
-
+  
+In all figures, the y axis is the expected w.w. concentration (given all aother variables are at mean value), and the x axes are    
+* MYEAR = measurement year  
+* FAT_PERC = fat percentage in tissue    
+* LNMEA = length of fish in millimeters   
+  
 ```{r, echo = FALSE}
 
 get_data <- function(param, station, data){

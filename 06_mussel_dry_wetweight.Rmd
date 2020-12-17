@@ -186,7 +186,9 @@ df %>%
 ```
 
 ### Number of significant linear trends   
-For metals and chlorobiphenyls separately 
+For metals and chlorobiphenyls separately   
+* Row 1/2: whether time trend of w.w. concentrations was significant on the 0.05 level     
+* Column 1/2: whether time trend of d.w. concentrations was significant on the 0.05 level     
 ```{r, echo=FALSE, results = 'asis'}
 
 for (group in c("Metals", "Chlorobiphenyls", "Polybrominated diphenyl ethers", 
@@ -270,12 +272,16 @@ df %>%
   scale_color_manual(values = p_colors) +
   geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
   geom_smooth(method = "deming", color = "red", size = 1) +
-  facet_wrap(vars(determinand_group))
+  facet_wrap(vars(determinand_group)) +
+  labs(x = "Slope of time trend, wet-weight concentration",
+       y = "Slope of time trend, dry-weight concentration")
 
 ```
 
 
 ## Individual compounds {.tabset }  
+
+* Blue dotted line: 1:1 line (same trend using w.w. and d.w. concentration)        
 
 
 ### PCBs
@@ -299,7 +305,9 @@ gg <- df %>%
   geom_point(aes(color = `P < 0.05`)) +
   scale_color_manual(values = p_colors) +
   geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
-  facet_wrap(vars(determinand))
+  facet_wrap(vars(determinand)) +
+  labs(x = "Slope of time trend, wet-weight concentration",
+       y = "Slope of time trend, dry-weight concentration")
 
 gg + geom_smooth(method = "deming", color = "red", size = 1)
 
@@ -334,7 +342,10 @@ gg <- df %>%
   geom_point(aes(color = `P < 0.05`)) +
   scale_color_manual(values = p_colors) +
   geom_abline(slope = 1, intercept = 0, color = "blue", size = 1, linetype = 2) +
-  facet_wrap(vars(determinand))
+  facet_wrap(vars(determinand)) +
+  labs(x = "Slope of time trend, wet-weight concentration",
+       y = "Slope of time trend, dry-weight concentration")
+
 
 gg + geom_smooth(method = "deming", color = "red", size = 1)
  
@@ -351,6 +362,10 @@ ggplotly(gg2)
 
 
 ## Individual compounds, difference plot {.tabset } 
+
+x-axis: Mean of d.w. trend and w.w. trend   
+y-axis: D.w. trend minus w.w. trend   
+Blue dotted line marks where d.w and w.w. trend is the same  
 
 ### PCBs
 ```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
@@ -374,7 +389,10 @@ gg <- df %>%
   geom_point(aes(color = `P < 0.05`)) +
   scale_color_manual(values = p_colors) +
   geom_hline(yintercept = 0, color = "blue", size = 1, linetype = 2) +
-  facet_wrap(vars(determinand))
+  facet_wrap(vars(determinand)) +
+  labs(x = "Mean of d.w. trend and w.w. trend",
+       y = "D.w. trend minus w.w. trend")   
+
  
 gg 
 
@@ -412,7 +430,9 @@ gg <- df %>%
   geom_point(aes(color = `P < 0.05`)) +
   scale_color_manual(values = p_colors) +
   geom_hline(yintercept = 0, color = "blue", size = 1, linetype = 2) +
-  facet_wrap(vars(determinand))
+  facet_wrap(vars(determinand)) +
+  labs(x = "Mean of d.w. trend and w.w. trend",
+       y = "D.w. trend minus w.w. trend")   
  
 gg + geom_smooth(method = "lm", color = "red", size = 1)
 
@@ -431,6 +451,10 @@ ggplotly(gg2)
 
 
 ## PCBs by country  {.tabset}
+
+* X axis: Slope of time trend (i.e., change per year), wet-weight concentration   
+* Y axis: Slope of time trend (i.e., change per year), wet-weight concentration   
+* Blue dotted line: 1:1 line (same trend using w.w. and d.w. concentration)        
 
 ### UK 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}
@@ -697,6 +721,10 @@ ggplotly(gg2)
 
 
 ## Metals by country  {.tabset}
+
+* X axis: Slope of time trend (i.e., change per year), wet-weight concentration   
+* Y axis: Slope of time trend (i.e., change per year), wet-weight concentration   
+* Blue dotted line: 1:1 line (same trend using w.w. and d.w. concentration)        
 
 ### UK 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=6}

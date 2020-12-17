@@ -27,6 +27,12 @@ Thus:
 * The effect of ln(fat) assumed to be linear   
 * Effect of year (non-linear effect) and length (linear) also taken into account   
 
+In the output and plot below,  
+* MYEAR = measurement year  
+* FAT_PERC = fat percentage in tissue    
+* LNMEA = length of fish in millimeters    
+
+
 ```
 ## 
 ## Family: gaussian 
@@ -53,7 +59,10 @@ Thus:
 ## GCV = 0.66053  Scale est. = 0.64401   n = 206
 ```
 
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-4-1.png)<!-- -->
+Plot of the model. The y axis is the expected w.w. concentration (given all aother variables are at mean value), and the x axes are    
+  
+
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-5-1.png)<!-- -->
 
 
 ### Several substances + stations          
@@ -70,40 +79,45 @@ Effect of ln(fat) on ln(concentration)
 * Analysis done for time series with at least 10 years and at least 70% data over LOQ    
   
 ### PCBs
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-6-1.png)<!-- -->
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-7-1.png)<!-- -->
 
 
 ### BDEs
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-7-1.png)<!-- -->
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-8-1.png)<!-- -->
 
 
 
 ### Organochorines, paraffins
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-8-1.png)<!-- -->
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-9-1.png)<!-- -->
 
 
 ### PFAS and DDTs
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-9-1.png)<!-- -->
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-10-1.png)<!-- -->
 
   
 ## Effect of fat, explained variance {.tabset}  
   
 ### PCBs
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-10-1.png)<!-- -->
-
-### BDEss
 ![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-11-1.png)<!-- -->
 
-
-### Organochorines, paraffins
+### BDEss
 ![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-12-1.png)<!-- -->
 
 
-### PFAS and DDTs
+### Organochorines, paraffins
 ![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-13-1.png)<!-- -->
 
-## Some more examples  
 
+### PFAS and DDTs
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-14-1.png)<!-- -->
+
+## Some more examples  
+  
+In all figures, the y axis is the expected w.w. concentration (given all aother variables are at mean value), and the x axes are    
+* MYEAR = measurement year  
+* FAT_PERC = fat percentage in tissue    
+* LNMEA = length of fish in millimeters   
+  
 
 
 
@@ -111,70 +125,70 @@ Effect of ln(fat) on ln(concentration)
 
 
 ### CB52 at station 36B      
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-16-1.png)<!-- -->
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-17-1.png)<!-- -->
 
 
 
 
 
 ### CB118 at station 36B      
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-18-1.png)<!-- -->
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-19-1.png)<!-- -->
 
 
 
 
 ### CB_S7 at station 36B      
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-20-1.png)<!-- -->
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-21-1.png)<!-- -->
 
 
 
 
 ### BDE49 at station 30B      
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-22-1.png)<!-- -->
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-23-1.png)<!-- -->
 
 
 
 
 ### BDE99 at station 30B      
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-24-1.png)<!-- -->
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-25-1.png)<!-- -->
 
 
 
 
 ### BDE6S at station 30B      
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-26-1.png)<!-- -->
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-27-1.png)<!-- -->
 
 
 
 
 ### OCS at station 30B      
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-28-1.png)<!-- -->
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-29-1.png)<!-- -->
 
 
 
 
 
 ### HCB at station 23B      
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-30-1.png)<!-- -->
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-31-1.png)<!-- -->
 
 
 
 
 
 ### SCCP at station 23B      
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-32-1.png)<!-- -->
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-33-1.png)<!-- -->
 
 
 
 
 
 ### PFOS at station 30B      
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-34-1.png)<!-- -->
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-35-1.png)<!-- -->
 
 
 
 
 
 ### DDEPP at station 30B      
-![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-36-1.png)<!-- -->
+![](07_Correlations_with_fat_cod_files/figure-html/unnamed-chunk-37-1.png)<!-- -->
 

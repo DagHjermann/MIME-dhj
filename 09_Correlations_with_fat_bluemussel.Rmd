@@ -68,10 +68,10 @@ sel_param <- c(
   "CB_S7", "CB28", "CB52", "CB77", "CB81", "CB101", "CB105", 
   "CB118", "CB126", "CB138", "CB153", "CB156", "CB169", "CB180", "CB209",
   "HCB", "HCHG", "ICDP", 
-  "TBT", 
+  "TBT", "DBT", 
   "KPAH", "P_S", "PAH16", "ACNE", "ANT", "BAP", "BBJF", "BEP", "BGHIP", 
   "BKF", "BAA",  "CHR", "FLE", "FLU", "PA", "PER", "PYR",
-  "DBT", "DDEPP", "DDTEP", "DDTPP", "TCDD", "TDEPP"
+  "DDEPP", "DDTEP", "DDTPP", "TCDD", "TDEPP"
 )
 
 df_series <- df_series %>%
@@ -95,8 +95,8 @@ Model: `ln(concentration) = a*ln(fat) + spline(Year)`
 
 Thus:  
 
-* The effect of ln(fat) assumed to be linear   
-* The effect of year (non-linear effect) is also taken into account   
+* The effect of ln(fat) assumed to be linear. This effect is given by the line `log(FAT_PERC)` in the output below. `Estimate` gives the slope of the effect      
+* The effect of year (non-linear effect) is also taken into account, i.e. it is controlled for general cganges in the concentration (given by the line `s(MYEAR)` in the output)  
 ```{r, echo = FALSE, fig.height=4, fig.width=8}
 
 # param <- "CB_S7"
@@ -214,7 +214,8 @@ df_effect %>%
   scale_color_manual(values = c("red3", "grey40")) +
   geom_hline(yintercept = 0) +
   facet_wrap(vars(PARAM), ncol = 3) +
-  theme(axis.text.x = element_text(angle = -45, hjust = 0, size = 6))
+  theme(axis.text.x = element_text(angle = -45, hjust = 0, size = 6)) +
+  labs(y = "Effect of fat on ln ww-concentration (slope)")
 
 ```
 
@@ -227,7 +228,7 @@ df_effect %>%
 ```{r, echo=FALSE, fig.width=9, fig.height=6}
 
 params <-  c("DDEPP", "DDTEP", "DDTPP", "TDEPP",
-             "HCB", "HCHG", "ICDP", "TBT")    # expected to NOT correlate with fat
+             "HCB", "HCHG", "ICDP", "TBT", "DBT")    # expected to NOT correlate with fat
              
 df_effect %>%
   filter(PARAM %in% params) %>%
@@ -238,7 +239,8 @@ df_effect %>%
   scale_color_manual(values = c("red3", "grey40")) +
   geom_hline(yintercept = 0) +
   facet_wrap(vars(PARAM)) +
-  theme(axis.text.x = element_text(angle = -45, hjust = 0, size = 6))
+  theme(axis.text.x = element_text(angle = -45, hjust = 0, size = 6)) + 
+  labs(y = "Effect of fat on ln ww-concentration (slope)")
 
 
 ```
@@ -258,7 +260,8 @@ df_effect %>%
   scale_color_manual(values = c("red3", "grey40")) +
   geom_hline(yintercept = 0) +
   facet_wrap(vars(PARAM)) +
-  theme(axis.text.x = element_text(angle = -45, hjust = 0, size = 9))
+  theme(axis.text.x = element_text(angle = -45, hjust = 0, size = 9)) + 
+  labs(y = "Effect of fat on ln ww-concentration (slope)")
 
 
 ```
@@ -277,7 +280,8 @@ df_effect %>%
   scale_color_manual(values = c("red3", "grey40")) +
   geom_hline(yintercept = 0) +
   facet_wrap(vars(PARAM)) +
-  theme(axis.text.x = element_text(angle = -45, hjust = 0, size = 6))
+  theme(axis.text.x = element_text(angle = -45, hjust = 0, size = 6)) +
+  labs(y = "Effect of fat on ln ww-concentration (slope)")
 
 
 ```
@@ -313,8 +317,8 @@ df2 <- get_data(param, station, df)
 m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC), data = df2)
 
 par(mfrow = c(1,2), mar = c(4,5,0,1), oma = c(0,0,2,0))
-visreg(m1)
-mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+visreg(m1, xlab = "Year", ylab = "ln ww. concentration")
+mtext(paste0(param, ", station ", station), outer = TRUE, line = 0.5)
 
 ```
 
@@ -331,8 +335,8 @@ df2 <- get_data(param, station, df)
 m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC), data = df2)
 
 par(mfrow = c(1,2), mar = c(4,5,0,1), oma = c(0,0,2,0))
-visreg(m1)
-mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+visreg(m1, xlab = "Year", ylab = "ln ww. concentration")
+mtext(paste0(param, ", station ", station), outer = TRUE, line = 0.5)
 
 ```
 
@@ -349,8 +353,8 @@ df2 <- get_data(param, station, df)
 m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC), data = df2)
 
 par(mfrow = c(1,2), mar = c(4,5,0,1), oma = c(0,0,2,0))
-visreg(m1)
-mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+visreg(m1, xlab = "Year", ylab = "ln ww. concentration")
+mtext(paste0(param, ", station ", station), outer = TRUE, line = 0.5)
 
 ```
 
@@ -367,8 +371,8 @@ df2 <- get_data(param, station, df)
 m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC), data = df2)
 
 par(mfrow = c(1,2), mar = c(4,5,0,1), oma = c(0,0,2,0))
-visreg(m1)
-mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+visreg(m1, xlab = "Year", ylab = "ln ww. concentration")
+mtext(paste0(param, ", station ", station), outer = TRUE, line = 0.5)
 
 ```
 
@@ -385,8 +389,8 @@ df2 <- get_data(param, station, df)
 m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC), data = df2)
 
 par(mfrow = c(1,2), mar = c(4,5,0,1), oma = c(0,0,2,0))
-visreg(m1)
-mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+visreg(m1, xlab = "Year", ylab = "ln ww. concentration")
+mtext(paste0(param, ", station ", station), outer = TRUE, line = 0.5)
 
 ```
 
@@ -405,8 +409,8 @@ df2 <- get_data(param, station, df)
 m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC), data = df2)
 
 par(mfrow = c(1,2), mar = c(4,5,0,1), oma = c(0,0,2,0))
-visreg(m1)
-mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+visreg(m1, xlab = "Year", ylab = "ln ww. concentration")
+mtext(paste0(param, ", station ", station), outer = TRUE, line = 0.5)
 
 ```
 
@@ -425,8 +429,8 @@ df2 <- get_data(param, station, df)
 m1 <- gam(log(VALUE_WW) ~ s(MYEAR) + log(FAT_PERC), data = df2)
 
 par(mfrow = c(1,2), mar = c(4,5,0,1), oma = c(0,0,2,0))
-visreg(m1)
-mtext(paste0(param, ", ", station), outer = TRUE, line = 0.5)
+visreg(m1, xlab = "Year", ylab = "ln ww. concentration")
+mtext(paste0(param, ", station ", station), outer = TRUE, line = 0.5)
 
 ```
 

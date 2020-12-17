@@ -9,6 +9,8 @@ output:
     keep_md: true
 ---
 
+*Fulton's index* (or *Fulton's condition factor* ) is given by K = 100(W/L<sup>3</sup>)   
+See [Wikipedia](https://en.wikipedia.org/wiki/Standard_weight_in_fish#Applications)  
 
 ```{r, echo=FALSE, results='hide', warning=FALSE, message=FALSE}
 
@@ -133,14 +135,14 @@ df2 %>%
   ggplot(aes(year, DRYWT)) +
   geom_point() +
   geom_smooth(method = "lm", formula = 'y ~ x') +
-  labs(title = paste0(param, " at ", station, ", dry wt by year"))
+  labs(title = paste0(param, " at ", station, ", dry weight perentage by year"))
 
 df2 %>%
   filter(station_name == station & Parameter %in% param) %>% 
   ggplot(aes(year, Fultons)) +
   geom_point() +
   geom_smooth(method = "lm", formula = 'y ~ x') +
-  labs(title = paste0(param, " at ", station, ", Fultons by year"))
+  labs(title = paste0(param, " at ", station, ", Fulton's index by year"))
 
 df2 %>%
   filter(station_name == station & Parameter %in% param) %>%
@@ -211,7 +213,9 @@ df_slopes <- 1:nrow(df_series) %>%
 
 ```
 
-### W.w. conc. trend vs. Fulton trend  
+### W.w. conc. trend vs. Fulton trend   
+* the x axis is the slope of the time trend of Fulton's index  
+* the y axis is the slope of the time trend of w.w. concentration    
 ```{r, echo = FALSE, fig.width = 8, fig.height=6, warning=FALSE}
 
 gg <- ggplot(df_slopes, aes(fulton_slope, conc_ww_slope, 
@@ -223,7 +227,9 @@ ggplotly(gg)
 
 ```
 
-### Ww trend minus dw trend, vs. Fulton trend  
+### Ww trend minus dw trend, vs. Fulton trend   
+* the x axis is the slope of the time trend of Fulton's index   
+* the y axis is the *difference* in time trends (w.w. minus d.w.)      
 ```{r, echo = FALSE, fig.width = 8, fig.height=6, warning=FALSE}
 
 gg <- df_slopes %>%
@@ -238,7 +244,9 @@ ggplotly(gg)
 ```
 
 
-### Ratio of Ww trend / dw trend, vs. Fulton trend  
+### Ratio of Ww trend / dw trend, vs. Fulton trend    
+* the x axis is the slope of the time trend of Fulton's index   
+* the y axis is the *ratio* of time trends (w.w. divided by d.w.)      
 ```{r, echo = FALSE, fig.width = 8, fig.height=6}
 
 gg <- df_slopes %>%
@@ -255,7 +263,11 @@ ggplotly(gg)
 
 
 ## More examples   
-
+  
+In all plots,  
+* DRYWT = dry weight percentage  
+* Fultons = Fulton's index  
+* Param Conc = Wet weight concentration
   
 
 ### Negative trend in both w.w. concentration and Fulton's index  
@@ -275,12 +287,12 @@ df2_sel <- df2 %>%
 ggplot(df2_sel, aes(year, DRYWT)) +
   geom_point() +
   geom_smooth(method = "lm", formula = 'y ~ x') +
-  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), dry wt"))
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), dry weight perentage"))
 
 ggplot(df2_sel, aes(year, Fultons)) +
   geom_point() +
   geom_smooth(method = "lm", formula = 'y ~ x') +
-  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), Fulton"))
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), Fulton's index"))
 
 ggplot(df2_sel, aes(year, `Param Conc`)) +
   geom_point() +
@@ -308,12 +320,12 @@ df2_sel <- df2 %>%
 ggplot(df2_sel, aes(year, DRYWT)) +
   geom_point() +
   geom_smooth(method = "lm", formula = 'y ~ x') +
-  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), dry wt"))
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), dry weight perentage"))
 
 ggplot(df2_sel, aes(year, Fultons)) +
   geom_point() +
   geom_smooth(method = "lm", formula = 'y ~ x') +
-  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), Fulton"))
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), Fulton's index"))
 
 ggplot(df2_sel, aes(year, `Param Conc`)) +
   geom_point() +
@@ -343,12 +355,12 @@ df2_sel <- df2 %>%
 ggplot(df2_sel, aes(year, DRYWT)) +
   geom_point() +
   geom_smooth(method = "lm", formula = 'y ~ x') +
-  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), dry wt"))
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), dry weight perentage"))
 
 ggplot(df2_sel, aes(year, Fultons)) +
   geom_point() +
   geom_smooth(method = "lm", formula = 'y ~ x') +
-  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), Fulton"))
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), Fulton's index"))
 
 ggplot(df2_sel, aes(year, `Param Conc`)) +
   geom_point() +
@@ -375,12 +387,12 @@ df2_sel <- df2 %>%
 ggplot(df2_sel, aes(year, DRYWT)) +
   geom_point() +
   geom_smooth(method = "lm", formula = 'y ~ x') +
-  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), dry wt"))
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), dry weight perentage"))
 
 ggplot(df2_sel, aes(year, Fultons)) +
   geom_point() +
   geom_smooth(method = "lm", formula = 'y ~ x') +
-  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), Fulton"))
+  labs(title = paste0(param, " at ", station, " (", df2_sel$country[1], "), Fulton's index"))
 
 ggplot(df2_sel, aes(year, `Param Conc`)) +
   geom_point() +
